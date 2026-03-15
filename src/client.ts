@@ -168,8 +168,8 @@ bikaClient.interceptors.request.use(async (config) => {
 
   const imageQuality =
     payload.imageQuality || payload.settings?.imageQuality || "original";
-  const data = await runtime.pluginConfig.loadPluginConfig("token", "");
-  const authorization = JSON.parse(data || "{}").value;
+  const authorization =
+    payload.authorization ?? payload.settings?.authorization ?? "";
   const appChannel = String(payload.settings?.proxy || "1");
   const headers = AxiosHeaders.from(config.headers);
 
