@@ -222,7 +222,6 @@ client.interceptors.response.use(
 );
 
 async function bikaRequest(payload: BikaRequestPayload = { url: "" }) {
-  console.log("bikaRequest", payload);
   const method = toUpperMethod(payload.method);
   const useCache = Boolean(payload.cache && method === "GET");
   const cacheKey = buildCacheKey(payload, method);
