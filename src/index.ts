@@ -1,3 +1,4 @@
+import axios from "axios";
 import { runtime } from "../type/runtime-api";
 import client, { buildCacheKey, readCache } from "./client";
 
@@ -53,6 +54,26 @@ async function bikaRequest(payload: BikaRequestPayload = { url: "" }) {
   return response.data;
 }
 
+async function fetchImageBytes({ url = "", timeoutMs = 30000 } = {}) {
+  const targetUrl = url.trim();
+  if (!targetUrl) throw new Error("url 不能为空");
+
+  const { host } = new URL(targetUrl);
+
+  const response = await axios.get(targetUrl, {
+    headers: { Host: host },
+    timeout: Math.max(0, timeoutMs) || 30000,
+    responseType: "arraybuffer",
+  });
+
+  const nativeBufferId = await runtime.native.put(
+    new Uint8Array(response.data),
+  );
+
+  return { nativeBufferId: Number(nativeBufferId) };
+}
+
 export default {
   bikaRequest,
+  fetchImageBytes,
 };
