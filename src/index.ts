@@ -117,6 +117,98 @@ function toBool(value: unknown, fallback = false): boolean {
   return fallback;
 }
 
+function buildBikaCoverUrl(fileServer: unknown, pathValue: unknown): string {
+  const rawUrl = String(fileServer ?? "").trim();
+  let path = String(pathValue ?? "").trim();
+  if (!rawUrl) {
+    return "";
+  }
+
+  try {
+    const parsed = new URL(rawUrl);
+    if (parsed.pathname && parsed.pathname !== "/") {
+      return rawUrl;
+    }
+  } catch (_) {
+    // noop
+  }
+
+  let url = rawUrl;
+  if (
+    url === "https://storage1.picacomic.com" ||
+    url === "https://storage-b.picacomic.com"
+  ) {
+    url = "https://img.picacomic.com";
+  }
+
+  if (path.includes("tobeimg/")) {
+    path = path.replace("tobeimg/", "");
+  } else if (path.includes("tobs/")) {
+    path = `static/${path.replace("tobs/", "")}`;
+  } else if (path && !path.includes("/") && !url.includes("/static")) {
+    path = `static/${path}`;
+  }
+
+  return path ? `${url}/${path}` : url;
+}
+
+function buildMetadata(type: string, name: string, value: unknown) {
+  const list = Array.isArray(value)
+    ? value
+    : value == null
+      ? []
+      : [value];
+  const normalized = list
+    .map((item) => String(item ?? "").trim())
+    .filter((item) => item.length > 0);
+
+  if (!normalized.length) {
+    return null;
+  }
+
+  return {
+    type,
+    name,
+    value: normalized,
+  };
+}
+
+function toComicListItem(comic: any) {
+  const id = String(comic?._id ?? comic?.id ?? "");
+  const title = String(comic?.title ?? "");
+  const thumb = comic?.thumb ?? {};
+  const fileServer = String(thumb?.fileServer ?? "");
+  const path = String(thumb?.path ?? "");
+
+  return {
+    source: "bika",
+    id,
+    title,
+    subtitle: "",
+    finished: toBool(comic?.finished),
+    likesCount: toNum(comic?.likesCount),
+    viewsCount: toNum(comic?.totalViews ?? comic?.viewsCount),
+    updatedAt: String(comic?.updated_at ?? ""),
+    cover: {
+      id,
+      url: buildBikaCoverUrl(fileServer, path),
+      extra: {
+        path,
+        name: String(thumb?.originalName ?? ""),
+        fileServer,
+      },
+    },
+    metadata: [
+      buildMetadata("author", "作者", comic?.author),
+      buildMetadata("team", "汉化组", comic?.chineseTeam),
+      buildMetadata("categories", "分类", comic?.categories),
+      buildMetadata("tags", "标签", comic?.tags),
+    ].filter(Boolean),
+    raw: comic,
+    extra: {},
+  };
+}
+
 function ensureBikaComicShape(comic: Record<string, any>) {
   const creator = (comic._creator ??= {});
   creator.slogan ??= "";
@@ -233,27 +325,32 @@ async function getComicDetail(payload: ComicDetailPayload = {}) {
       name: String(item?.title ?? ""),
       order: toNum(item?.order),
     })),
-    recommend: recommend.map((item: any) => ({
-      id: String(item?._id ?? ""),
-      title: String(item?.title ?? ""),
-      cover: {
-        url: String(item?.thumb?.fileServer ?? ""),
-        path: String(item?.thumb?.path ?? ""),
-        name: String(item?.thumb?.originalName ?? ""),
-      },
-    })),
+    recommend: recommend.map((item: any) => toComicListItem(item)),
   };
 
-  return {
+  const scheme = {
+    version: "1.0.0",
+    type: "comicDetail",
     source: "bika",
-    comicId,
-    extern: payload.extern ?? null,
+  };
+
+  const data = {
     normal,
     raw: {
       comicInfo: comic,
       eps: epsDocs,
       recommend,
     },
+  };
+
+  return {
+    source: "bika",
+    comicId,
+    extern: payload.extern ?? null,
+    scheme,
+    data,
+    normal: data.normal,
+    raw: data.raw,
   };
 }
 
@@ -510,11 +607,7 @@ async function searchComic(payload: BikaSearchPayload = {}) {
       total: toNum(comics.total, normalizedDocs.length),
       hasReachedMax: toNum(comics.page, page) >= toNum(comics.pages, page),
     },
-    items: normalizedDocs.map((doc: any) => ({
-      id: String(doc._id ?? doc.id ?? ""),
-      title: String(doc.title ?? ""),
-      raw: doc,
-    })),
+    items: normalizedDocs.map((doc: any) => toComicListItem(doc)),
   };
 
   return {
@@ -781,6 +874,20 @@ async function getChapter(payload: BikaChapterPayload = {}) {
     comicId,
     chapterId,
     extern: payload.extern ?? null,
+    scheme: {
+      version: "1.0.0",
+      type: "chapterContent",
+      source: "bika",
+    },
+    data: {
+      chapter: {
+        epId,
+        epName,
+        length: docs.length,
+        epPages: String(docs.length),
+        docs,
+      },
+    },
     chapter: {
       epId,
       epName,
