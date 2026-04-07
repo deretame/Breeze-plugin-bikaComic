@@ -1,6 +1,46 @@
 import axios, { AxiosHeaders } from "axios";
 import { runtime } from "../type/runtime-api";
 
+type UnauthorizedErrorPayload = {
+  type: "unauthorized";
+  source: string;
+  message: string;
+  scheme?: Record<string, unknown>;
+  data?: Record<string, unknown>;
+};
+
+const BIKA_PLUGIN_ID = "0a0e5858-a467-4702-994a-79e608a4589d";
+
+let unauthorizedSchemeProvider:
+  | (() => Promise<Record<string, unknown> | undefined>)
+  | null = null;
+
+export function setUnauthorizedSchemeProvider(
+  provider: () => Promise<Record<string, unknown> | undefined>,
+) {
+  unauthorizedSchemeProvider = provider;
+}
+
+async function buildUnauthorizedError(
+  message = "登录过期，请重新登录",
+): Promise<Error> {
+  const payload: UnauthorizedErrorPayload = {
+    type: "unauthorized",
+    source: BIKA_PLUGIN_ID,
+    message,
+  };
+  try {
+    const bundle = await unauthorizedSchemeProvider?.();
+    if (bundle && typeof bundle === "object") {
+      payload.scheme = (bundle.scheme as Record<string, unknown>) ?? undefined;
+      payload.data = (bundle.data as Record<string, unknown>) ?? undefined;
+    }
+  } catch (_) {
+    // ignore scheme build errors
+  }
+  return new Error(JSON.stringify(payload));
+}
+
 type ClientPayload = {
   url?: string;
   method?: string;
@@ -168,8 +208,9 @@ bikaClient.interceptors.request.use(async (config) => {
 
   const imageQuality =
     payload.imageQuality || payload.settings?.imageQuality || "original";
-  const authorization =
-    payload.authorization ?? payload.settings?.authorization ?? "";
+  const authorization = String(
+    await loadPluginSetting("auth.authorization", ""),
+  ).trim();
   const appChannel = String(payload.settings?.proxy || "1");
   const headers = AxiosHeaders.from(config.headers);
 
@@ -210,7 +251,23 @@ bikaClient.interceptors.response.use(
 
     return response;
   },
-  (error: unknown) => {
+  async (error: unknown) => {
+    const e = error as {
+      response?: {
+        data?: { code?: number; message?: string; error?: string };
+        status?: number;
+      };
+    };
+    const data = e?.response?.data;
+    if (
+      e?.response?.status === 401 ||
+      (data?.code === 401 &&
+        data?.error === "1005" &&
+        data?.message === "unauthorized")
+    ) {
+      throw await buildUnauthorizedError("登录过期，请重新登录");
+    }
+
     const mapped = mapNetworkError(error);
 
     if (error && typeof error === "object") {
@@ -222,5 +279,21 @@ bikaClient.interceptors.response.use(
     throw new Error(mapped);
   },
 );
+
+async function loadPluginSetting(key: string, fallback: unknown) {
+  const raw = await runtime.pluginConfig.loadPluginConfig(
+    key,
+    JSON.stringify(fallback),
+  );
+  try {
+    const decoded = JSON.parse(String(raw));
+    if (decoded?.ok === true) {
+      return decoded.value;
+    }
+  } catch (_) {
+    // noop
+  }
+  return fallback;
+}
 
 export default bikaClient;
