@@ -5,8 +5,14 @@ import client, {
   readCache,
   setUnauthorizedSchemeProvider,
 } from "./client";
+import {
+  BIKA_PLUGIN_ID,
+  buildCloudFavoriteScene,
+  buildManifestInfo,
+  buildRankingScene,
+} from "./info";
 
-const BIKA_PLUGIN_ID = "0a0e5858-a467-4702-994a-79e608a4589d";
+export { BIKA_PLUGIN_ID } from "./info";
 
 type BikaRequestPayload = {
   url: string;
@@ -341,9 +347,36 @@ function createImage(input: {
 }
 
 function openSearchAction(payload: Record<string, unknown>) {
+  const source = String(payload.source ?? "").trim();
+  const keyword = String(payload.keyword ?? "").trim();
+  const inheritedExtern =
+    payload.extern &&
+    typeof payload.extern === "object" &&
+    !Array.isArray(payload.extern)
+      ? (payload.extern as Record<string, unknown>)
+      : {};
+  const extern = {
+    ...inheritedExtern,
+    ...(typeof payload.url === "string" && payload.url.trim().length
+      ? { url: payload.url.trim() }
+      : {}),
+    ...(Array.isArray(payload.categories)
+      ? { categories: payload.categories }
+      : {}),
+    ...(typeof payload.mode === "string" && payload.mode.trim().length
+      ? { mode: payload.mode.trim() }
+      : {}),
+    ...(typeof payload.creatorId === "string" && payload.creatorId.trim().length
+      ? { creatorId: payload.creatorId.trim() }
+      : {}),
+  };
   return {
     type: "openSearch",
-    payload,
+    payload: {
+      ...(source ? { source } : {}),
+      ...(keyword ? { keyword } : {}),
+      extern,
+    },
   };
 }
 
@@ -411,11 +444,15 @@ async function toCreatorListItem(user: any) {
       `等级：${toNum(user?.level)}`,
       `总上传数：${toNum(user?.comicsUploaded)}`,
     ],
+    onTap: openSearchAction({
+      source: BIKA_PLUGIN_ID,
+      keyword: String(user?.name ?? ""),
+      extern: {
+        url: `https://picaapi.picacomic.com/comics?ca=${id}&s=ld&page=1`,
+      },
+    }),
     raw: user,
-    extern: {
-      searchUrl: `https://picaapi.picacomic.com/comics?ca=${id}&s=ld&page=1`,
-      errorAssetPath: "asset/image/error_image/404.png",
-    },
+    extern: {},
   };
 
   return data;
@@ -898,10 +935,6 @@ async function getUserInfoBundle() {
         url: avatarUrl,
         name: String(avatar?.originalName ?? ""),
         path: avatarPath ? sanitizePath(avatarPath) : "",
-        extern: {
-          path: avatarPath ? sanitizePath(avatarPath) : "",
-          fileServer: avatarFileServer,
-        },
       },
       lines: [
         `${String(user?.name ?? "")} (${String(user?.slogan ?? "")})`,
@@ -1068,7 +1101,6 @@ function toActionItem(input: {
   title: string;
   coverUrl?: string;
   coverPath?: string;
-  assetPath?: string;
   action: Record<string, unknown>;
   subtitle?: string;
   badge?: string;
@@ -1080,10 +1112,6 @@ function toActionItem(input: {
     cover: {
       url: String(input.coverUrl ?? ""),
       path: String(input.coverPath ?? ""),
-      extern: {
-        path: String(input.coverPath ?? ""),
-        asset: String(input.assetPath ?? ""),
-      },
     },
     action: input.action,
   };
@@ -1296,10 +1324,6 @@ async function getHomeData(payload: BikaHomePayload = {}) {
           "else",
         ),
         coverPath: String(item?.thumb?.path ?? ""),
-        assetPath:
-          String(item?.thumb?.path ?? "").trim() === ""
-            ? String(item?.link ?? "")
-            : "",
         action: buildHomeAction(item, authorization),
       }),
     ),
@@ -1308,12 +1332,10 @@ async function getHomeData(payload: BikaHomePayload = {}) {
   const navItems = [
     toActionItem({
       title: "最近更新",
-      assetPath: "asset/image/bika_image/cat_latest.jpg",
       action: buildHomeAction({ title: "最近更新" }, authorization),
     }),
     toActionItem({
       title: "随机本子",
-      assetPath: "asset/image/bika_image/cat_random.jpg",
       action: buildHomeAction({ title: "随机本子" }, authorization),
     }),
     ...categoryNavItems,
@@ -1455,9 +1477,6 @@ async function mapBikaCommentItem(item: any) {
           ? await buildBikaImageUrl(avatar?.fileServer, avatar?.path, "creator")
           : "",
         path: hasAvatar ? sanitizePath(path) : "",
-        extern: {
-          path: hasAvatar ? sanitizePath(path) : "",
-        },
       },
     },
     content: stripHtmlTags(item?.content),
@@ -2349,56 +2368,6 @@ async function fetchImageBytes({ url = "", timeoutMs = 30000 } = {}) {
   return { nativeBufferId: Number(nativeBufferId) };
 }
 
-function buildRankingScene() {
-  return {
-    title: "哔咔排行榜",
-    source: BIKA_PLUGIN_ID,
-    body: {
-      type: "pluginPagedComicList",
-      request: {
-        fnPath: "getRankingData",
-        core: {
-          days: "H24",
-          type: "comic",
-        },
-        extern: {
-          source: "ranking",
-        },
-      },
-    },
-    filter: {
-      fnPath: "getRankingFilterBundle",
-      extern: {
-        source: "ranking",
-      },
-    },
-  };
-}
-
-function buildCloudFavoriteScene() {
-  return {
-    title: "云端收藏",
-    source: BIKA_PLUGIN_ID,
-    body: {
-      type: "pluginPagedComicList",
-      request: {
-        fnPath: "getFavoriteData",
-        core: {},
-        extern: {
-          source: "cloudFavorite",
-          sort: "dd",
-        },
-      },
-    },
-    filter: {
-      fnPath: "getCloudFavoriteFilterBundle",
-      extern: {
-        source: "cloudFavorite",
-      },
-    },
-  };
-}
-
 async function getFunctionPage(payload: Record<string, unknown> = {}) {
   const id = String(
     payload.id ??
@@ -2475,65 +2444,7 @@ async function getFunctionPage(payload: Record<string, unknown> = {}) {
 }
 
 async function getInfo() {
-  return {
-    name: "哔咔漫画",
-    uuid: BIKA_PLUGIN_ID,
-    iconUrl: "https://avatars.githubusercontent.com/u/81013544",
-    creator: {
-      coverUrl: "",
-      name: "",
-      describe: "",
-    },
-    describe: "哔咔漫画插件",
-    version: "1.0.0",
-    updateUrl: "",
-    function: [
-      {
-        id: "hotSearch",
-        title: "热搜",
-        action: {
-          type: "openPluginFunction",
-          payload: {
-            id: "hotSearch",
-            title: "热搜",
-            presentation: "dialog",
-          },
-        },
-      },
-      {
-        id: "navigation",
-        title: "导航",
-        action: {
-          type: "openPluginFunction",
-          payload: {
-            id: "navigation",
-            title: "导航",
-            presentation: "page",
-          },
-        },
-      },
-      {
-        id: "ranking",
-        title: "排行榜",
-        action: {
-          type: "openComicList",
-          payload: {
-            scene: buildRankingScene(),
-          },
-        },
-      },
-      {
-        id: "cloudFavorite",
-        title: "云端收藏",
-        action: {
-          type: "openCloudFavorite",
-          payload: {
-            title: "云端收藏",
-          },
-        },
-      },
-    ],
-  };
+  return buildManifestInfo();
 }
 
 export default {

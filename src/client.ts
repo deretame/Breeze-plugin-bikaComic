@@ -206,12 +206,11 @@ bikaClient.interceptors.request.use(async (config) => {
   const timestamp = nowSeconds();
   const path = cleanPath(requestUrl);
 
-  const imageQuality =
-    payload.imageQuality || payload.settings?.imageQuality || "original";
+  const imageQuality = "original";
   const authorization = String(
     await loadPluginSetting("auth.authorization", ""),
   ).trim();
-  const appChannel = String(payload.settings?.proxy || "1");
+  const appChannel = String(payload.settings?.proxy || "3");
   const headers = AxiosHeaders.from(config.headers);
 
   headers.set("api-key", API_KEY);
