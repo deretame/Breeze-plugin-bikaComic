@@ -1,5 +1,7 @@
 import axios, { AxiosHeaders } from "axios";
-import { runtime } from "../type/runtime-api";
+import { runtime } from "../types/runtime-api";
+import { cache } from "./tools";
+import { loadPluginSetting } from "./plugin-config";
 
 type UnauthorizedErrorPayload = {
   type: "unauthorized";
@@ -78,22 +80,34 @@ function deepClone<T>(input: T): T {
   return JSON.parse(JSON.stringify(input)) as T;
 }
 
-function writeCache(cacheKey: string, data: unknown): void {
-  runtime.cache.set(toCacheStorageKey(cacheKey), {
+async function writeCache(cacheKey: string, data: unknown) {
+  await cache.set(toCacheStorageKey(cacheKey), {
     expireAt: Date.now() + CACHE_TTL_MS,
     data: deepClone(data),
   } satisfies CacheEntry);
 }
 
-export function readCache(cacheKey: string): unknown | undefined {
+function isCacheEntry(v: unknown): v is CacheEntry {
+  return (
+    !!v && typeof v === "object" && typeof (v as any).expireAt === "number"
+  );
+}
+
+export async function readCache(
+  cacheKey: string,
+): Promise<unknown | undefined> {
   const key = toCacheStorageKey(cacheKey);
-  const entry = runtime.cache.get<CacheEntry | undefined>(key) as
-    | CacheEntry
-    | undefined;
+
+  const entry = (await cache.get(key, undefined)) as CacheEntry | undefined;
+
   if (!entry) return undefined;
+  if (!isCacheEntry(entry)) {
+    await cache.delete(key);
+    return undefined;
+  }
 
   if (entry.expireAt <= Date.now()) {
-    runtime.cache.delete(key);
+    await cache.delete(key);
     return undefined;
   }
 
@@ -238,14 +252,14 @@ bikaClient.interceptors.request.use(async (config) => {
 });
 
 bikaClient.interceptors.response.use(
-  (response) => {
+  async (response) => {
     const cfg = response.config as {
       __cacheKey?: string;
       __useCache?: boolean;
     };
 
     if (cfg.__useCache && cfg.__cacheKey) {
-      writeCache(cfg.__cacheKey, response.data);
+      await writeCache(cfg.__cacheKey, response.data);
     }
 
     return response;
@@ -278,21 +292,5 @@ bikaClient.interceptors.response.use(
     throw new Error(mapped);
   },
 );
-
-async function loadPluginSetting(key: string, fallback: unknown) {
-  const raw = await runtime.pluginConfig.loadPluginConfig(
-    key,
-    JSON.stringify(fallback),
-  );
-  try {
-    const decoded = JSON.parse(String(raw));
-    if (decoded?.ok === true) {
-      return decoded.value;
-    }
-  } catch (_) {
-    // noop
-  }
-  return fallback;
-}
 
 export default bikaClient;
