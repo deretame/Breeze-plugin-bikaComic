@@ -62,8 +62,9 @@ export function buildManifestInfo() {
     },
     describe: "哔咔漫画插件",
     version: "0.0.1",
-    updateUrl: "",
-    home: "",
+    updateUrl:
+      "https://api.github.com/repos/deretame/Breeze-plugin-bikaComic/releases/latest",
+    home: "https://github.com/deretame/Breeze-plugin-bikaComic",
     function: [
       {
         id: "hotSearch",
