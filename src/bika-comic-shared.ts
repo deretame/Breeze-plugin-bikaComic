@@ -1,4 +1,5 @@
 import { BIKA_PLUGIN_ID } from "./info";
+import { API_BASE } from "./client";
 import type { BikaRequestPayload, RankingFilterOption } from "./bika-types";
 import { sanitizePath, toBool, toNum, toStrList } from "./bika-utils";
 import { savePluginSetting } from "./plugin-config";
@@ -127,6 +128,7 @@ export function createComicHelpers(
         : {};
     const extern = {
       ...inheritedExtern,
+      ...(keyword ? { keyword } : {}),
       ...(typeof payload.url === "string" && payload.url.trim().length
         ? { url: payload.url.trim() }
         : {}),
@@ -217,7 +219,7 @@ export function createComicHelpers(
         source: BIKA_PLUGIN_ID,
         keyword: String(user?.name ?? ""),
         extern: {
-          url: `https://picaapi.picacomic.com/comics?ca=${id}&s=ld&page=1`,
+          url: `${API_BASE}comics?ca=${id}&s=ld&page=1`,
         },
       }),
       raw: user,
@@ -281,55 +283,39 @@ export function createComicHelpers(
   function buildHomeAction(category: any, authorization = "") {
     const title = String(category?.title ?? "");
     if (title === "最近更新") {
-      return {
-        type: "openSearch",
-        payload: { source: BIKA_PLUGIN_ID },
-      };
+      return openSearchAction({
+        source: BIKA_PLUGIN_ID,
+      });
     }
     if (title === "随机本子") {
-      return {
-        type: "openSearch",
-        payload: {
-          source: BIKA_PLUGIN_ID,
-          url: "https://picaapi.picacomic.com/comics/random",
-        },
-      };
+      return openSearchAction({
+        source: BIKA_PLUGIN_ID,
+        url: `${API_BASE}comics/random`,
+      });
     }
     if (title === "大家都在看") {
-      return {
-        type: "openSearch",
-        payload: {
-          source: BIKA_PLUGIN_ID,
-          url: "https://picaapi.picacomic.com/comics?page=1&c=%E5%A4%A7%E5%AE%B6%E9%83%BD%E5%9C%A8%E7%9C%8B&s=dd",
-        },
-      };
+      return openSearchAction({
+        source: BIKA_PLUGIN_ID,
+        url: `${API_BASE}comics?page=1&c=%E5%A4%A7%E5%AE%B6%E9%83%BD%E5%9C%A8%E7%9C%8B&s=dd`,
+      });
     }
     if (title === "大濕推薦") {
-      return {
-        type: "openSearch",
-        payload: {
-          source: BIKA_PLUGIN_ID,
-          url: "https://picaapi.picacomic.com/comics?page=1&c=%E5%A4%A7%E6%BF%95%E6%8E%A8%E8%96%A6&s=dd",
-        },
-      };
+      return openSearchAction({
+        source: BIKA_PLUGIN_ID,
+        url: `${API_BASE}comics?page=1&c=%E5%A4%A7%E6%BF%95%E6%8E%A8%E8%96%A6&s=dd`,
+      });
     }
     if (title === "那年今天") {
-      return {
-        type: "openSearch",
-        payload: {
-          source: BIKA_PLUGIN_ID,
-          url: "https://picaapi.picacomic.com/comics?page=1&c=%E9%82%A3%E5%B9%B4%E4%BB%8A%E5%A4%A9&s=dd",
-        },
-      };
+      return openSearchAction({
+        source: BIKA_PLUGIN_ID,
+        url: `${API_BASE}comics?page=1&c=%E9%82%A3%E5%B9%B4%E4%BB%8A%E5%A4%A9&s=dd`,
+      });
     }
     if (title === "官方都在看") {
-      return {
-        type: "openSearch",
-        payload: {
-          source: BIKA_PLUGIN_ID,
-          url: "https://picaapi.picacomic.com/comics?page=1&c=%E5%AE%98%E6%96%B9%E9%83%BD%E5%9C%A8%E7%9C%8B&s=dd",
-        },
-      };
+      return openSearchAction({
+        source: BIKA_PLUGIN_ID,
+        url: `${API_BASE}comics?page=1&c=%E5%AE%98%E6%96%B9%E9%83%BD%E5%9C%A8%E7%9C%8B&s=dd`,
+      });
     }
     if (category?.isWeb) {
       let url = String(category?.link ?? "");
@@ -341,26 +327,20 @@ export function createComicHelpers(
         payload: { title, url },
       };
     }
-    return {
-      type: "openSearch",
-      payload: {
-        source: BIKA_PLUGIN_ID,
-        categories: [title],
-      },
-    };
+    return openSearchAction({
+      source: BIKA_PLUGIN_ID,
+      categories: [title],
+    });
   }
 
   function toHomeChip(label: unknown) {
     const text = String(label ?? "").trim();
     return {
       label: text,
-      action: {
-        type: "openSearch",
-        payload: {
-          source: BIKA_PLUGIN_ID,
-          keyword: text,
-        },
-      },
+      action: openSearchAction({
+        source: BIKA_PLUGIN_ID,
+        keyword: text,
+      }),
     };
   }
 
