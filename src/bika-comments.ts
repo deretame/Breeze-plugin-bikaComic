@@ -1,4 +1,5 @@
 import { BIKA_PLUGIN_ID } from "./info";
+import { API_BASE } from "./client";
 import type { BikaCommentFeedPayload, BikaRequestPayload } from "./bika-types";
 import {
   formatDisplayTime,
@@ -59,7 +60,7 @@ export function createCommentHandlers({
     }
 
     const raw = (await bikaRequest({
-      url: `https://picaapi.picacomic.com/comics/${comicId}/comments?page=${page}`,
+      url: `${API_BASE}comics/${comicId}/comments?page=${page}`,
       method: "GET",
     })) as Record<string, any>;
 
@@ -109,7 +110,7 @@ export function createCommentHandlers({
     }
 
     const raw = (await bikaRequest({
-      url: `https://picaapi.picacomic.com/comments/${commentId}/childrens?page=${page}`,
+      url: `${API_BASE}comments/${commentId}/childrens?page=${page}`,
       method: "GET",
     })) as Record<string, any>;
 
@@ -151,7 +152,7 @@ export function createCommentHandlers({
     }
 
     const raw = (await bikaRequest({
-      url: `https://picaapi.picacomic.com/comics/${comicId}/comments`,
+      url: `${API_BASE}comics/${comicId}/comments`,
       method: "POST",
       body: { content },
     })) as Record<string, any>;
@@ -192,7 +193,7 @@ export function createCommentHandlers({
     }
 
     const raw = (await bikaRequest({
-      url: `https://picaapi.picacomic.com/comments/${commentId}`,
+      url: `${API_BASE}comments/${commentId}`,
       method: "POST",
       body: { content },
     })) as Record<string, any>;

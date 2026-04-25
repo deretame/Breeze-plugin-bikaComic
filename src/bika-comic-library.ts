@@ -1,4 +1,5 @@
 import { BIKA_PLUGIN_ID } from "./info";
+import { API_BASE } from "./client";
 import type {
   BikaFavoriteFolderPayload,
   BikaFavoritePayload,
@@ -7,11 +8,13 @@ import type {
   BikaSearchPayload,
   BikaToggleFavoritePayload,
 } from "./bika-types";
-import type {
-  ComicHandlerDeps,
-  ComicHelpers,
-} from "./bika-comic-shared";
-import { resolveSceneFnPath, toNum, toStrList, toStringMap } from "./bika-utils";
+import type { ComicHandlerDeps, ComicHelpers } from "./bika-comic-shared";
+import {
+  resolveSceneFnPath,
+  toNum,
+  toStrList,
+  toStringMap,
+} from "./bika-utils";
 
 type ComicLibraryHandlersDeps = {
   deps: ComicHandlerDeps;
@@ -37,27 +40,41 @@ export function createComicLibraryHandlers({
     getRuntimeSelectedCategories,
   } = helpers;
   async function searchComic(payload: BikaSearchPayload = {}) {
+    console.log(payload);
+    const payloadMap = toStringMap(payload);
     const extern = toStringMap(payload.extern);
     const page = Math.max(1, toNum(payload.page, 1));
     const sort =
-      String(extern.sort ?? toSortKeyword(extern.sortBy)).trim() || "dd";
+      String(
+        extern.sort ??
+          payloadMap.sort ??
+          toSortKeyword(extern.sortBy ?? payloadMap.sortBy),
+      ).trim() || "dd";
     const keyword = String(payload.keyword ?? extern.keyword ?? "").trim();
-    const mode = String(extern.mode ?? "").trim();
-    const creatorId = String(extern.creatorId ?? "").trim();
-    const categories = boolKeyList(extern.categories);
+    const mode = String(extern.mode ?? payloadMap.mode ?? "").trim();
+    const creatorId = String(
+      extern.creatorId ?? payloadMap.creatorId ?? "",
+    ).trim();
+    const categories = boolKeyList(extern.categories ?? payloadMap.categories);
     if (categories.length) {
       setRuntimeSelectedCategories(categories);
     }
-    const blockedCategories = boolKeyList(extern.blockedCategories);
-    if (blockedCategories.length || extern.blockedCategories) {
+    const blockedCategories = boolKeyList(
+      extern.blockedCategories ?? payloadMap.blockedCategories,
+    );
+    if (
+      blockedCategories.length ||
+      extern.blockedCategories ||
+      payloadMap.blockedCategories
+    ) {
       await saveBlockedCategories(blockedCategories);
     }
-    const overrideUrl = String(extern.url ?? "").trim();
+    const overrideUrl = String(extern.url ?? payloadMap.url ?? "").trim();
 
     let response: Record<string, any>;
     if (mode === "creator" && creatorId) {
       response = (await bikaRequest({
-        url: `https://picaapi.picacomic.com/comics?ca=${creatorId}&s=${sort}&page=${page}`,
+        url: `${API_BASE}comics?ca=${creatorId}&s=${sort}&page=${page}`,
         method: "GET",
       })) as Record<string, any>;
     } else if (overrideUrl) {
@@ -69,14 +86,14 @@ export function createComicLibraryHandlers({
         })) as Record<string, any>;
       } else if (overrideUrl.includes("%E9%82%A3%E5%B9%B4%E4%BB%8A%E5%A4%A9")) {
         response = (await bikaRequest({
-          url: `https://picaapi.picacomic.com/comics?page=${page}&c=%E9%82%A3%E5%B9%B4%E4%BB%8A%E5%A4%A9&s=${sort}`,
+          url: `${API_BASE}comics?page=${page}&c=%E9%82%A3%E5%B9%B4%E4%BB%8A%E5%A4%A9&s=${sort}`,
           method: "GET",
         })) as Record<string, any>;
       } else if (
         overrideUrl.includes("%E5%AE%98%E6%96%B9%E9%83%BD%E5%9C%A8%E7%9C%8B")
       ) {
         response = (await bikaRequest({
-          url: `https://picaapi.picacomic.com/comics?page=${page}&c=%E5%AE%98%E6%96%B9%E9%83%BD%E5%9C%A8%E7%9C%8B&s=${sort}`,
+          url: `${API_BASE}comics?page=${page}&c=%E5%AE%98%E6%96%B9%E9%83%BD%E5%9C%A8%E7%9C%8B&s=${sort}`,
           method: "GET",
         })) as Record<string, any>;
       } else {
@@ -87,7 +104,7 @@ export function createComicLibraryHandlers({
       }
     } else {
       response = (await bikaRequest({
-        url: `https://picaapi.picacomic.com/comics/advanced-search?page=${page}`,
+        url: `${API_BASE}comics/advanced-search?page=${page}`,
         method: "POST",
         body: {
           sort,
@@ -159,7 +176,10 @@ export function createComicLibraryHandlers({
       source: BIKA_PLUGIN_ID,
       extern: {
         ...extern,
-        sortBy: toNum(extern.sortBy, 1),
+        ...(overrideUrl ? { url: overrideUrl } : {}),
+        ...(mode ? { mode } : {}),
+        ...(creatorId ? { creatorId } : {}),
+        sortBy: toNum(extern.sortBy ?? payloadMap.sortBy, 1),
         categories: toBoolMap(
           categories.length ? categories : getRuntimeSelectedCategories(),
         ),
@@ -179,25 +199,31 @@ export function createComicLibraryHandlers({
   async function getHomeData(payload: BikaHomePayload = {}) {
     const [categoriesResponse, keywordsResponse] = await Promise.all([
       bikaRequest({
-        url: "https://picaapi.picacomic.com/categories",
+        url: `${API_BASE}categories`,
         method: "GET",
         cache: true,
       }),
       bikaRequest({
-        url: "https://picaapi.picacomic.com/keywords",
+        url: `${API_BASE}keywords`,
         method: "GET",
         cache: true,
       }),
     ]);
 
-    const categories = Array.isArray((categoriesResponse as any)?.data?.categories)
+    const categories = Array.isArray(
+      (categoriesResponse as any)?.data?.categories,
+    )
       ? (categoriesResponse as any).data.categories
       : [];
     const authorization = String(
       await loadPluginSetting("auth.authorization", ""),
     );
-    const keywordItems = Array.isArray((keywordsResponse as any)?.data?.keywords)
-      ? (keywordsResponse as any).data.keywords.map((item: unknown) => toHomeChip(item))
+    const keywordItems = Array.isArray(
+      (keywordsResponse as any)?.data?.keywords,
+    )
+      ? (keywordsResponse as any).data.keywords.map((item: unknown) =>
+          toHomeChip(item),
+        )
       : [];
 
     const categoryNavItems = await Promise.all(
@@ -263,7 +289,7 @@ export function createComicLibraryHandlers({
     const sort = String(extern.sort ?? extern.order ?? "dd").trim() || "dd";
 
     const raw = await bikaRequest({
-      url: `https://picaapi.picacomic.com/users/favourite?s=${sort}&page=${page}`,
+      url: `${API_BASE}users/favourite?s=${sort}&page=${page}`,
       method: "GET",
     });
 
@@ -308,7 +334,7 @@ export function createComicLibraryHandlers({
     }
 
     await bikaRequest({
-      url: `https://picaapi.picacomic.com/comics/${comicId}/like`,
+      url: `${API_BASE}comics/${comicId}/like`,
       method: "POST",
     });
 
@@ -325,7 +351,7 @@ export function createComicLibraryHandlers({
     }
 
     await bikaRequest({
-      url: `https://picaapi.picacomic.com/comics/${comicId}/favourite`,
+      url: `${API_BASE}comics/${comicId}/favourite`,
       method: "POST",
     });
 

@@ -1,4 +1,5 @@
 import { BIKA_PLUGIN_ID } from "./info";
+import { API_BASE } from "./client";
 import type { BikaRankingPayload } from "./bika-types";
 import type { ComicHandlerDeps, ComicHelpers } from "./bika-comic-shared";
 
@@ -20,9 +21,9 @@ export function createComicRankingHandlers({
     let url = "";
 
     if (type === "creator") {
-      url = "https://picaapi.picacomic.com/comics/knight-leaderboard";
+      url = `${API_BASE}comics/knight-leaderboard`;
     } else {
-      url = `https://picaapi.picacomic.com/comics/leaderboard?tt=${days}&ct=VC`;
+      url = `${API_BASE}comics/leaderboard?tt=${days}&ct=VC`;
     }
 
     const raw = await bikaRequest({

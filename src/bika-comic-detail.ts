@@ -1,4 +1,5 @@
 import { BIKA_PLUGIN_ID } from "./info";
+import { API_BASE } from "./client";
 import type {
   BikaChapterPayload,
   BikaReadSnapshotPayload,
@@ -33,7 +34,7 @@ export function createComicDetailHandlers({
     }
 
     const infoResponse = (await bikaRequest({
-      url: `https://picaapi.picacomic.com/comics/${comicId}`,
+      url: `${API_BASE}comics/${comicId}`,
       method: "GET",
     })) as Record<string, any>;
 
@@ -45,7 +46,7 @@ export function createComicDetailHandlers({
     const epsResponses = await Promise.all(
       Array.from({ length: totalPages }, (_, index) =>
         bikaRequest({
-          url: `https://picaapi.picacomic.com/comics/${comicId}/eps?page=${index + 1}`,
+          url: `${API_BASE}comics/${comicId}/eps?page=${index + 1}`,
           method: "GET",
           cache: true,
         }),
@@ -57,21 +58,23 @@ export function createComicDetailHandlers({
       .sort((a: any, b: any) => toNum(a?.order) - toNum(b?.order));
 
     const recommendResponse = (await bikaRequest({
-      url: `https://picaapi.picacomic.com/comics/${comicId}/recommendation`,
+      url: `${API_BASE}comics/${comicId}/recommendation`,
       method: "GET",
       cache: true,
     })) as Record<string, any>;
 
-    const recommend = (recommendResponse?.data?.comics ?? []).map((item: any) => {
-      const next = { ...item };
-      next.author ??= "";
-      next.likesCount = toNum(next.likesCount, 0);
-      next.thumb ??= {};
-      next.thumb.fileServer ??= "";
-      next.thumb.path ??= "";
-      next.thumb.originalName ??= "";
-      return next;
-    });
+    const recommend = (recommendResponse?.data?.comics ?? []).map(
+      (item: any) => {
+        const next = { ...item };
+        next.author ??= "";
+        next.likesCount = toNum(next.likesCount, 0);
+        next.thumb ??= {};
+        next.thumb.fileServer ??= "";
+        next.thumb.path ??= "";
+        next.thumb.originalName ??= "";
+        return next;
+      },
+    );
 
     const recommendItems = await Promise.all(
       recommend.map(async (item: any) => {
@@ -89,7 +92,10 @@ export function createComicDetailHandlers({
               item?.thumb?.path,
               "cover",
             ),
-            path: String(item?.thumb?.path ?? "").replace(/[^a-zA-Z0-9_\-.]/g, "_"),
+            path: String(item?.thumb?.path ?? "").replace(
+              /[^a-zA-Z0-9_\-.]/g,
+              "_",
+            ),
             name: String(item?.thumb?.originalName ?? ""),
           }),
           extension: {
@@ -132,7 +138,7 @@ export function createComicDetailHandlers({
           onTap: openSearchAction({
             source: BIKA_PLUGIN_ID,
             keyword: String(comic._creator?.name ?? ""),
-            url: `https://picaapi.picacomic.com/comics?ca=${String(comic._creator?._id ?? "")}&s=ld&page=1`,
+            url: `${API_BASE}comics?ca=${String(comic._creator?._id ?? "")}&s=ld&page=1`,
           }),
           extension: {},
         },
@@ -144,7 +150,10 @@ export function createComicDetailHandlers({
             comic.thumb?.path,
             "cover",
           ),
-          path: String(comic.thumb?.path ?? "").replace(/[^a-zA-Z0-9_\-.]/g, "_"),
+          path: String(comic.thumb?.path ?? "").replace(
+            /[^a-zA-Z0-9_\-.]/g,
+            "_",
+          ),
           name: String(comic.thumb?.originalName ?? ""),
         }),
         metadata: [
@@ -171,7 +180,10 @@ export function createComicDetailHandlers({
             (item) =>
               createActionItem(
                 item,
-                openSearchAction({ source: BIKA_PLUGIN_ID, categories: [item] }),
+                openSearchAction({
+                  source: BIKA_PLUGIN_ID,
+                  categories: [item],
+                }),
               ),
           ),
           createMetadataActionList("tags", "标签", comic.tags, (item) =>
@@ -246,7 +258,7 @@ export function createComicDetailHandlers({
 
     while (page <= totalPages) {
       const result = (await bikaRequest({
-        url: `https://picaapi.picacomic.com/comics/${comicId}/order/${chapterId}/pages?page=${page}`,
+        url: `${API_BASE}comics/${comicId}/order/${chapterId}/pages?page=${page}`,
         method: "GET",
         cache: true,
       })) as Record<string, any>;
@@ -327,7 +339,8 @@ export function createComicDetailHandlers({
       comicId,
       extern: payload.extern,
     });
-    const normal = (detail as any)?.data?.normal ?? (detail as any)?.normal ?? {};
+    const normal =
+      (detail as any)?.data?.normal ?? (detail as any)?.normal ?? {};
 
     const chapterRefs = (Array.isArray(normal?.eps) ? normal.eps : []).map(
       (ep: any) => ({
@@ -370,15 +383,15 @@ export function createComicDetailHandlers({
       (chapterBundle as any)?.data?.chapter ??
       (chapterBundle as any)?.chapter ??
       {};
-    const pages = (Array.isArray(chapterData?.docs) ? chapterData.docs : []).map(
-      (doc: any) => ({
-        id: String(doc?.id ?? ""),
-        name: String(doc?.name ?? doc?.originalName ?? ""),
-        path: String(doc?.path ?? ""),
-        url: String(doc?.url ?? doc?.fileServer ?? ""),
-        extern: {},
-      }),
-    );
+    const pages = (
+      Array.isArray(chapterData?.docs) ? chapterData.docs : []
+    ).map((doc: any) => ({
+      id: String(doc?.id ?? ""),
+      name: String(doc?.name ?? doc?.originalName ?? ""),
+      path: String(doc?.path ?? ""),
+      url: String(doc?.url ?? doc?.fileServer ?? ""),
+      extern: {},
+    }));
 
     const comicInfo = normal?.comicInfo ?? {};
 

@@ -57,12 +57,43 @@ type ClientPayload = {
   };
 };
 
-export const API_BASE = "https://picaapi.picacomic.com/";
+const tempUrl = "aabbcc.xyz";
+export const DEFAULT_API_BASE = "https://picaapi.picacomic.com/";
+export const BACKUP_API_BASE = "https://picaapi.go2778.com/";
+export const API_BASE_CANDIDATES = [DEFAULT_API_BASE, BACKUP_API_BASE] as const;
+export let API_BASE = DEFAULT_API_BASE;
 export const CACHE_KEY_PREFIX = "bikaComic:requestCache:";
 const API_KEY = "C69BAF41DA5ABD1FFEDC6D2FEA56B";
 const SECRET_KEY =
   "~d}$Q7$eIni=V)9\\RK/P.RM4;9[7|@/CA}b~OW!3?EV`:<>M7pddUBL5n|0/*Cn";
 const CACHE_TTL_MS = 10 * 60 * 1000;
+
+export type ApiBaseProbeResult = {
+  base: string;
+  ok: boolean;
+  elapsedMs: number;
+  status?: number;
+  reason?: string;
+};
+
+export type ApiBaseSelectionResult = {
+  selected: string;
+  fallbackUsed: boolean;
+  results: ApiBaseProbeResult[];
+};
+
+function normalizeApiBase(base: string): string {
+  const value = String(base || "").trim();
+  if (!value) return "";
+  return value.endsWith("/") ? value : `${value}/`;
+}
+
+export function setApiBase(base: string) {
+  console.info(`setApiBase: ${base}`);
+  const normalized = normalizeApiBase(base);
+  API_BASE = normalized || DEFAULT_API_BASE;
+  bikaClient.defaults.baseURL = API_BASE;
+}
 
 type CacheEntry = {
   expireAt: number;
@@ -160,8 +191,21 @@ function toUpperMethod(method: unknown): string {
 }
 
 function cleanPath(input: string): string {
-  return String(input || "")
-    .replace(API_BASE, "")
+  const value = String(input || "").trim();
+  if (!value) return "";
+
+  if (/^https?:\/\//i.test(value)) {
+    try {
+      const parsed = new URL(value);
+      return `${parsed.pathname}${parsed.search}`.replace(/^\/+/, "");
+    } catch {
+      // ignore parse error
+    }
+  }
+
+  return value
+    .replace(DEFAULT_API_BASE, "")
+    .replace(BACKUP_API_BASE, "")
     .replace(/^\/+/, "");
 }
 
@@ -203,6 +247,87 @@ function mapNetworkError(err: unknown): string {
     return "连接服务器超时";
   }
   return String(e?.message || err || "未知网络错误");
+}
+
+async function probeApiBase(
+  base: string,
+  timeoutMs: number,
+): Promise<ApiBaseProbeResult> {
+  const normalizedBase = normalizeApiBase(base);
+  const startedAt = Date.now();
+  if (!normalizedBase) {
+    return {
+      base: DEFAULT_API_BASE,
+      ok: false,
+      elapsedMs: 0,
+      reason: "invalid_base",
+    };
+  }
+
+  try {
+    const response = await axios.get(`${normalizedBase}comics/random`, {
+      timeout: Math.max(1, timeoutMs),
+      validateStatus: () => true,
+      adapter: "fetch",
+    });
+
+    return {
+      base: normalizedBase,
+      ok: true,
+      elapsedMs: Date.now() - startedAt,
+      status: response.status,
+    };
+  } catch (err) {
+    const e = err as { code?: string; message?: string };
+    return {
+      base: normalizedBase,
+      ok: false,
+      elapsedMs: Date.now() - startedAt,
+      reason: String(e?.code || e?.message || err || "probe_failed"),
+    };
+  }
+}
+
+export async function selectBestApiBase(
+  options: {
+    candidates?: string[];
+    timeoutMs?: number;
+  } = {},
+): Promise<ApiBaseSelectionResult> {
+  const timeoutMs = Math.max(1, Number(options.timeoutMs || 10_000));
+  const candidates = [
+    DEFAULT_API_BASE,
+    ...(options.candidates ?? Array.from(API_BASE_CANDIDATES)),
+  ]
+    .map((item) => normalizeApiBase(item))
+    .filter((item) => item.length > 0);
+  const uniqueCandidates = Array.from(new Set(candidates));
+  const results = await Promise.all(
+    uniqueCandidates.map(async (base) => await probeApiBase(base, timeoutMs)),
+  );
+
+  const success = results
+    .filter((item) => item.ok)
+    .sort((a, b) => a.elapsedMs - b.elapsedMs);
+
+  console.info(
+    `selectBestApiBase: success=${success.length}, results=${JSON.stringify(results)}`,
+  );
+
+  if (success.length) {
+    setApiBase(success[0].base);
+    return {
+      selected: API_BASE,
+      fallbackUsed: false,
+      results,
+    };
+  }
+
+  return {
+    selected: API_BASE,
+    fallbackUsed: true,
+    results,
+  };
 }
 
 const bikaClient = axios.create({

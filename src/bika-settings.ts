@@ -3,6 +3,11 @@ import {
   BIKA_SEARCH_CATEGORY_OPTIONS,
 } from "./bika-constants";
 import { BIKA_PLUGIN_ID } from "./info";
+import {
+  API_BASE,
+  API_BASE_CANDIDATES,
+  selectBestApiBase,
+} from "./client";
 import type { BikaLoginPayload, BikaRequestPayload } from "./bika-types";
 import { sanitizePath, toBool, toNum, toStrList } from "./bika-utils";
 import {
@@ -32,6 +37,7 @@ export function createSettingsHandlers({
 }: SettingsHandlerDeps) {
   let bikaAuthFlowStarted = false;
   let bikaAuthFlowRunning = false;
+  let apiBaseChecked = false;
 
   async function getSettingsBundle() {
     const [
@@ -133,7 +139,7 @@ export function createSettingsHandlers({
 
   async function getUserInfoBundle() {
     const profile = await bikaRequest({
-      url: "https://picaapi.picacomic.com/users/profile",
+      url: `${API_BASE}users/profile`,
       method: "GET",
       cache: false,
     });
@@ -179,7 +185,7 @@ export function createSettingsHandlers({
     }
 
     const result = await bikaRequest({
-      url: "https://picaapi.picacomic.com/users/profile",
+      url: `${API_BASE}users/profile`,
       method: "PUT",
       body: JSON.stringify({ slogan: value }),
     });
@@ -203,7 +209,7 @@ export function createSettingsHandlers({
     }
 
     const result = await bikaRequest({
-      url: "https://picaapi.picacomic.com/users/password",
+      url: `${API_BASE}users/password`,
       method: "PUT",
       body: JSON.stringify({
         new_password: newPassword,
@@ -252,7 +258,7 @@ export function createSettingsHandlers({
     }
 
     const result = await bikaRequest({
-      url: "https://picaapi.picacomic.com/auth/sign-in",
+      url: `${API_BASE}auth/sign-in`,
       method: "POST",
       body: JSON.stringify({ email: account, password }),
     });
@@ -306,7 +312,7 @@ export function createSettingsHandlers({
           await loginWithPassword({ account, password });
 
           await bikaRequest({
-            url: "https://picaapi.picacomic.com/users/punch-in",
+            url: `${API_BASE}users/punch-in`,
             method: "POST",
             body: JSON.stringify({}),
             cache: false,
@@ -329,6 +335,17 @@ export function createSettingsHandlers({
   }
 
   async function init() {
+    if (!apiBaseChecked) {
+      apiBaseChecked = true;
+      const probe = await selectBestApiBase({
+        candidates: Array.from(API_BASE_CANDIDATES),
+        timeoutMs: 10_000,
+      });
+      console.info(
+        `[bika.init] api base selected: ${probe.selected} (fallbackUsed=${String(probe.fallbackUsed)})`,
+      );
+    }
+
     if (!bikaAuthFlowStarted) {
       bikaAuthFlowStarted = true;
       void runBikaAuthAndCheckInLoop();
@@ -339,6 +356,7 @@ export function createSettingsHandlers({
       data: {
         ok: true,
         started: true,
+        apiBase: API_BASE,
       },
     };
   }
