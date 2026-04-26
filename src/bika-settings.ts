@@ -315,7 +315,9 @@ export function createSettingsHandlers({
           console.info("[bika.init] login + checkin ok", data);
           const status = data?.data?.res?.status;
           if (data?.code === 200 && status && status !== "fail") {
-            flutterTools.showToast({ message: "签到成功", level: "success" });
+            try {
+              flutterTools.showToast({ message: "签到成功", level: "success" });
+            } catch (_) {}
           }
           return;
         } catch (error) {
