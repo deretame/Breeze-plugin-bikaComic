@@ -3,17 +3,11 @@ import {
   BIKA_SEARCH_CATEGORY_OPTIONS,
 } from "./bika-constants";
 import { BIKA_PLUGIN_ID } from "./info";
-import {
-  API_BASE,
-  API_BASE_CANDIDATES,
-  selectBestApiBase,
-} from "./client";
+import { API_BASE, API_BASE_CANDIDATES, selectBestApiBase } from "./client";
 import type { BikaLoginPayload, BikaRequestPayload } from "./bika-types";
 import { sanitizePath, toBool, toNum, toStrList } from "./bika-utils";
-import {
-  loadPluginSetting,
-  savePluginSetting,
-} from "./plugin-config";
+import { loadPluginSetting, savePluginSetting } from "./plugin-config";
+import { flutterTools } from "./tools";
 
 export { loadPluginSetting } from "./plugin-config";
 
@@ -311,14 +305,18 @@ export function createSettingsHandlers({
 
           await loginWithPassword({ account, password });
 
-          await bikaRequest({
+          const data = (await bikaRequest({
             url: `${API_BASE}users/punch-in`,
             method: "POST",
             body: JSON.stringify({}),
             cache: false,
-          });
+          })) as any;
 
-          console.info("[bika.init] login + checkin ok");
+          console.info("[bika.init] login + checkin ok", data);
+          const status = data?.data?.res?.status;
+          if (data?.code === 200 && status && status !== "fail") {
+            flutterTools.showToast({ message: "签到成功", level: "success" });
+          }
           return;
         } catch (error) {
           const delay = randomRetryDelayMs();

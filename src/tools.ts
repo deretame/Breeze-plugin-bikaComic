@@ -21,3 +21,20 @@ export const pluginConfig = {
   load: (key: string, fallback: unknown = "") =>
     bridge.call("load_plugin_config", key, fallback) as Promise<unknown>,
 };
+
+interface ToastOptions {
+  message: string;
+  title?: string;
+  seconds?: number;
+  level?: "info" | "success" | "warning" | "error";
+}
+
+export const flutterTools = {
+  getAppVersion: () => bridge.call("dart.getAppVersion") as Promise<string>,
+  showToast: (options: ToastOptions) => {
+    return bridge.call(
+      "flutter.showToast",
+      JSON.stringify(options),
+    ) as Promise<string>;
+  },
+};
