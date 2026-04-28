@@ -2,10 +2,10 @@ import {
   BIKA_HOME_CATEGORY_OPTIONS,
   BIKA_SEARCH_CATEGORY_OPTIONS,
 } from "./bika-constants";
-import { BIKA_PLUGIN_ID } from "./info";
-import { API_BASE, API_BASE_CANDIDATES, selectBestApiBase } from "./client";
 import type { BikaLoginPayload, BikaRequestPayload } from "./bika-types";
 import { sanitizePath, toBool, toNum, toStrList } from "./bika-utils";
+import { API_BASE, API_BASE_CANDIDATES, selectBestApiBase } from "./client";
+import { BIKA_PLUGIN_ID } from "./info";
 import { loadPluginSetting, savePluginSetting } from "./plugin-config";
 import { flutterTools } from "./tools";
 
@@ -316,7 +316,11 @@ export function createSettingsHandlers({
           const status = data?.data?.res?.status;
           if (data?.code === 200 && status && status !== "fail") {
             try {
-              flutterTools.showToast({ message: "签到成功", level: "success" });
+              flutterTools.showToast({
+                message: "哔咔签到成功",
+                seconds: 1,
+                level: "success",
+              });
             } catch (_) {}
           }
           return;
