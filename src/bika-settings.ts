@@ -198,7 +198,7 @@ export async function saveSettings(
 }
 
 export async function getUserInfoBundle() {
-  const apiBase = getApiBase();
+  const apiBase = await getApiBase();
   const profile = await bikaRequest({
     url: `${apiBase}users/profile`,
     method: "GET",
@@ -245,7 +245,7 @@ export async function updateProfile(payload: Record<string, unknown> = {}) {
     throw new Error("简介不能为空");
   }
 
-  const apiBase = getApiBase();
+  const apiBase = await getApiBase();
   const result = await bikaRequest({
     url: `${apiBase}users/profile`,
     method: "PUT",
@@ -270,7 +270,7 @@ export async function updatePassword(payload: Record<string, unknown> = {}) {
     throw new Error("缺少旧密码，请重新登录后再试");
   }
 
-  const apiBase = getApiBase();
+  const apiBase = await getApiBase();
   const result = await bikaRequest({
     url: `${apiBase}users/password`,
     method: "PUT",
@@ -320,7 +320,7 @@ export async function loginWithPassword(payload: BikaLoginPayload = {}) {
     throw new Error("账号或密码不能为空");
   }
 
-  const apiBase = getApiBase();
+  const apiBase = await getApiBase();
   const result = await bikaRequest({
     url: `${apiBase}auth/sign-in`,
     method: "POST",
@@ -375,7 +375,7 @@ async function runBikaAuthAndCheckInLoop() {
 
         await loginWithPassword({ account, password });
 
-        const apiBase = getApiBase();
+        const apiBase = await getApiBase();
         const data = (await bikaRequest({
           url: `${apiBase}users/punch-in`,
           method: "POST",
@@ -432,7 +432,7 @@ export async function init() {
     data: {
       ok: true,
       started: true,
-      apiBase: getApiBase(),
+      apiBase: await getApiBase(),
     },
   };
 }
