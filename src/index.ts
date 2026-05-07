@@ -1,34 +1,55 @@
-import { setUnauthorizedSchemeProvider } from "./client";
-import { createCommentHandlers } from "./bika-comments";
-import { createComicHandlers } from "./bika-comic";
-import { createBikaImageUrlBuilder } from "./bika-image";
+import {
+  getChapter,
+  getComicDetail,
+  getReadSnapshot,
+} from "./bika-comic-detail";
+import {
+  getFavoriteData,
+  getFunctionPage,
+  getHomeData,
+  listFavoriteFolders,
+  moveFavoriteToFolder,
+  searchComic,
+  toggleFavorite,
+  toggleLike,
+} from "./bika-comic-library";
+import { getRankingData } from "./bika-comic-ranking";
+import {
+  get_advanced_search_scheme,
+  get_cloud_favorite_scene_bundle,
+  getAdvancedSearchScheme,
+  getCloudFavoriteFilterBundle,
+  getCloudFavoriteSceneBundle,
+  getComicListSceneBundle,
+  getRankingFilterBundle,
+} from "./bika-comic-scenes";
+import {
+  getCommentFeed,
+  loadCommentReplies,
+  postComment,
+  postCommentReply,
+} from "./bika-comments";
 import { bikaRequest, fetchImageBytes } from "./bika-request";
-import { createSettingsHandlers, loadPluginSetting } from "./bika-settings";
-import { BIKA_PLUGIN_ID, buildManifestInfo } from "./info";
+import {
+  clearPluginSession,
+  dumpRuntimeInfo,
+  getCapabilitiesBundle,
+  getLoginBundle,
+  getSettingsBundle,
+  getUserInfoBundle,
+  init,
+  loginWithPassword,
+  saveSettings,
+  updatePassword,
+  updateProfile,
+} from "./bika-settings";
+import { setUnauthorizedSchemeProvider } from "./client";
+import { buildManifestInfo } from "./info";
 
 export { BIKA_PLUGIN_ID } from "./info";
 
-const buildBikaImageUrl = createBikaImageUrlBuilder(loadPluginSetting);
-
-const settingsHandlers = createSettingsHandlers({
-  bikaRequest,
-  buildBikaImageUrl,
-  loadPluginSetting,
-});
-
-const commentHandlers = createCommentHandlers({
-  bikaRequest,
-  buildBikaImageUrl,
-});
-
-const comicHandlers = createComicHandlers({
-  bikaRequest,
-  buildBikaImageUrl,
-  loadPluginSetting,
-});
-
 setUnauthorizedSchemeProvider(async () => {
-  const bundle = await settingsHandlers.getLoginBundle();
+  const bundle = await getLoginBundle();
   return bundle as Record<string, unknown>;
 });
 
@@ -37,41 +58,41 @@ async function getInfo() {
 }
 
 export default {
-  init: settingsHandlers.init,
+  init,
   bikaRequest,
-  getComicDetail: comicHandlers.getComicDetail,
-  getSettingsBundle: settingsHandlers.getSettingsBundle,
-  getUserInfoBundle: settingsHandlers.getUserInfoBundle,
-  updateProfile: settingsHandlers.updateProfile,
-  updatePassword: settingsHandlers.updatePassword,
-  getLoginBundle: settingsHandlers.getLoginBundle,
-  loginWithPassword: settingsHandlers.loginWithPassword,
-  getCapabilitiesBundle: settingsHandlers.getCapabilitiesBundle,
-  getComicListSceneBundle: comicHandlers.getComicListSceneBundle,
-  getRankingFilterBundle: comicHandlers.getRankingFilterBundle,
-  getAdvancedSearchScheme: comicHandlers.getAdvancedSearchScheme,
-  get_advanced_search_scheme: comicHandlers.get_advanced_search_scheme,
-  clearPluginSession: settingsHandlers.clearPluginSession,
-  dumpRuntimeInfo: settingsHandlers.dumpRuntimeInfo,
-  getHomeData: comicHandlers.getHomeData,
-  getFavoriteData: comicHandlers.getFavoriteData,
-  toggleLike: comicHandlers.toggleLike,
-  getCommentFeed: commentHandlers.getCommentFeed,
-  loadCommentReplies: commentHandlers.loadCommentReplies,
-  postComment: commentHandlers.postComment,
-  postCommentReply: commentHandlers.postCommentReply,
-  toggleFavorite: comicHandlers.toggleFavorite,
-  listFavoriteFolders: comicHandlers.listFavoriteFolders,
-  moveFavoriteToFolder: comicHandlers.moveFavoriteToFolder,
-  getCloudFavoriteFilterBundle: comicHandlers.getCloudFavoriteFilterBundle,
-  getCloudFavoriteSceneBundle: comicHandlers.getCloudFavoriteSceneBundle,
-  get_cloud_favorite_scene_bundle:
-    comicHandlers.get_cloud_favorite_scene_bundle,
-  getRankingData: comicHandlers.getRankingData,
-  searchComic: comicHandlers.searchComic,
-  getChapter: comicHandlers.getChapter,
-  getReadSnapshot: comicHandlers.getReadSnapshot,
+  getComicDetail,
+  getSettingsBundle,
+  saveSettings,
+  getUserInfoBundle,
+  updateProfile,
+  updatePassword,
+  getLoginBundle,
+  loginWithPassword,
+  getCapabilitiesBundle,
+  getComicListSceneBundle,
+  getRankingFilterBundle,
+  getAdvancedSearchScheme,
+  get_advanced_search_scheme,
+  clearPluginSession,
+  dumpRuntimeInfo,
+  getHomeData,
+  getFavoriteData,
+  toggleLike,
+  getCommentFeed,
+  loadCommentReplies,
+  postComment,
+  postCommentReply,
+  toggleFavorite,
+  listFavoriteFolders,
+  moveFavoriteToFolder,
+  getCloudFavoriteFilterBundle,
+  getCloudFavoriteSceneBundle,
+  get_cloud_favorite_scene_bundle,
+  getRankingData,
+  searchComic,
+  getChapter,
+  getReadSnapshot,
   fetchImageBytes,
-  getFunctionPage: comicHandlers.getFunctionPage,
+  getFunctionPage,
   getInfo,
 };

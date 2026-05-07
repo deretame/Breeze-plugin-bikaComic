@@ -1,8 +1,7 @@
 import axios from "axios";
 import { runtime } from "../types/runtime-api";
-import client, { buildCacheKey, readCache } from "./client";
 import type { BikaRequestPayload } from "./bika-types";
-import { flutterTools } from "./tools";
+import client, { buildCacheKey, readCache } from "./client";
 
 function toUpperMethod(method: unknown): string {
   const value = String(method || "GET").trim();
