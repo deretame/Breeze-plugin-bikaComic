@@ -76,10 +76,6 @@ export async function getCloudFavoriteSceneBundle() {
   };
 }
 
-export async function get_cloud_favorite_scene_bundle() {
-  return getCloudFavoriteSceneBundle();
-}
-
 export async function getComicListSceneBundle() {
   return {
     source: BIKA_PLUGIN_ID,
@@ -199,8 +195,4 @@ export async function getAdvancedSearchScheme(
       },
     },
   };
-}
-
-export async function get_advanced_search_scheme() {
-  return getAdvancedSearchScheme();
 }

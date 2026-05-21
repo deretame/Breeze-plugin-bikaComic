@@ -422,11 +422,6 @@ export async function init() {
     console.info(`[bika.init] api base selected: ${selectedApiBase}`);
   }
 
-  if (!bikaAuthFlowStarted) {
-    bikaAuthFlowStarted = true;
-    void runBikaAuthAndCheckInLoop();
-  }
-
   return {
     source: BIKA_PLUGIN_ID,
     data: {

@@ -15,8 +15,6 @@ import {
 } from "./bika-comic-library";
 import { getRankingData } from "./bika-comic-ranking";
 import {
-  get_advanced_search_scheme,
-  get_cloud_favorite_scene_bundle,
   getAdvancedSearchScheme,
   getCloudFavoriteFilterBundle,
   getCloudFavoriteSceneBundle,
@@ -72,7 +70,6 @@ export default {
   getComicListSceneBundle,
   getRankingFilterBundle,
   getAdvancedSearchScheme,
-  get_advanced_search_scheme,
   clearPluginSession,
   dumpRuntimeInfo,
   getHomeData,
@@ -87,7 +84,6 @@ export default {
   moveFavoriteToFolder,
   getCloudFavoriteFilterBundle,
   getCloudFavoriteSceneBundle,
-  get_cloud_favorite_scene_bundle,
   getRankingData,
   searchComic,
   getChapter,

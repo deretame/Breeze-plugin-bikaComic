@@ -1,5 +1,4 @@
 import axios from "axios";
-import { runtime } from "../types/runtime-api";
 import type { BikaRequestPayload } from "./bika-types";
 import client, { buildCacheKey, readCache } from "./client";
 
@@ -63,9 +62,5 @@ export async function fetchImageBytes({
     responseType: "arraybuffer",
   });
 
-  const nativeBufferId = await runtime.native.put(
-    new Uint8Array(response.data),
-  );
-
-  return { nativeBufferId: Number(nativeBufferId) };
+  return new Uint8Array(response.data);
 }
