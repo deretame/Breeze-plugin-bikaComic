@@ -55,7 +55,7 @@ export function buildManifestInfo() {
     name: "哔咔漫画",
     uuid: BIKA_PLUGIN_ID,
     iconUrl:
-      "https://raw.githubusercontent.com/deretame/Breeze-plugin-bikaComic/main/assets/logo_round.png",
+      "https://raw.githubusercontent.com/deretame/Breeze-plugin-bikaComic/main/assets/logo_round.webp",
     creator: {
       name: "",
       describe: "",
@@ -65,6 +65,7 @@ export function buildManifestInfo() {
     updateUrl:
       "https://api.github.com/repos/deretame/Breeze-plugin-bikaComic/releases/latest",
     home: "https://github.com/deretame/Breeze-plugin-bikaComic",
+    npmName: "breeze-plugin-bika-comic",
     function: [
       {
         id: "hotSearch",

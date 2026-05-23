@@ -1,7 +1,7 @@
 {
   "name": "哔咔漫画",
   "uuid": "0a0e5858-a467-4702-994a-79e608a4589d",
-  "iconUrl": "https://raw.githubusercontent.com/deretame/Breeze-plugin-bikaComic/main/assets/logo_round.png",
+  "iconUrl": "https://raw.githubusercontent.com/deretame/Breeze-plugin-bikaComic/main/assets/logo_round.webp",
   "creator": {
     "name": "",
     "describe": ""
@@ -10,6 +10,7 @@
   "version": "0.0.7",
   "updateUrl": "https://api.github.com/repos/deretame/Breeze-plugin-bikaComic/releases/latest",
   "home": "https://github.com/deretame/Breeze-plugin-bikaComic",
+  "npmName": "breeze-plugin-bika-comic",
   "function": [
     {
       "id": "hotSearch",
