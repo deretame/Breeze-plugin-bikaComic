@@ -4,6 +4,15 @@ import { sanitizePath, toBool, toNum, toStrList } from "./bika-utils";
 import { getApiBase } from "./client";
 import { BIKA_PLUGIN_ID } from "./info";
 import { loadPluginSetting, savePluginSetting } from "./plugin-config";
+import type {
+  ActionItem,
+  ComicListItem,
+  FunctionPageActionGridItem,
+  FunctionPageChipItem,
+  ImageItem,
+  MetadataListItem,
+  StringMap,
+} from "../types/type";
 
 export const runtimeSelectedCategories: string[] = [];
 
@@ -19,7 +28,11 @@ export function getRuntimeSelectedCategories() {
   return runtimeSelectedCategories;
 }
 
-function buildMetadata(type: string, name: string, value: unknown) {
+function buildMetadata(
+  type: string,
+  name: string,
+  value: unknown,
+): MetadataListItem | null {
   const list = Array.isArray(value) ? value : value == null ? [] : [value];
   const normalized = list
     .map((item) => String(item ?? "").trim())
@@ -32,19 +45,19 @@ function buildMetadata(type: string, name: string, value: unknown) {
   return {
     type,
     name,
-    value: normalized,
+    value: normalized.map((item) => ({ name: item, onTap: {}, extern: {} })),
   };
 }
 
 export function createActionItem(
   name: unknown,
   onTap: Record<string, unknown> = {},
-  extension: Record<string, unknown> = {},
-) {
+  extern: Record<string, unknown> = {},
+): ActionItem {
   return {
     name: String(name ?? ""),
-    onTap,
-    extension,
+    onTap: onTap as StringMap,
+    extern: extern as StringMap,
   };
 }
 
@@ -52,8 +65,8 @@ export function createMetadataActionList(
   type: string,
   name: string,
   values: unknown,
-  mapItem?: (value: string) => ReturnType<typeof createActionItem>,
-) {
+  mapItem?: (value: string) => ActionItem,
+): MetadataListItem | null {
   const list = Array.isArray(values) ? values : values == null ? [] : [values];
   const normalized = list
     .map((item) => String(item ?? "").trim())
@@ -76,14 +89,14 @@ export function createImage(input: {
   url: unknown;
   name?: unknown;
   path?: unknown;
-  extension?: Record<string, unknown>;
-}) {
+  extern?: Record<string, unknown>;
+}): ImageItem {
   return {
     id: String(input.id ?? ""),
     url: String(input.url ?? ""),
     name: String(input.name ?? ""),
     path: String(input.path ?? ""),
-    extension: input.extension ?? {},
+    extern: (input.extern ?? {}) as StringMap,
   };
 }
 
@@ -127,7 +140,7 @@ export async function toComicListItem(
   options: {
     pictureType?: "cover" | "creator" | "favourite" | "comic";
   } = {},
-) {
+): Promise<ComicListItem> {
   const id = String(comic?._id ?? comic?.id ?? "");
   const title = String(comic?.title ?? "");
   const thumb = comic?.thumb ?? {};
@@ -152,14 +165,15 @@ export async function toComicListItem(
       ),
       path: sanitizePath(path),
       name: String(thumb?.originalName ?? ""),
+      extern: {},
     },
     metadata: [
       buildMetadata("author", "作者", comic?.author),
       buildMetadata("team", "汉化组", comic?.chineseTeam),
       buildMetadata("categories", "分类", comic?.categories),
       buildMetadata("tags", "标签", comic?.tags),
-    ].filter(Boolean),
-    raw: comic,
+    ].filter((item): item is MetadataListItem => item != null),
+    raw: comic as StringMap,
     extern: {},
   };
 }
@@ -179,8 +193,9 @@ export async function toCreatorListItem(user: any) {
         "creator",
       ),
       path: sanitizePath(user?.avatar?.path ?? ""),
+      extern: {},
     },
-    metadata: [],
+    metadata: [] as ActionItem[],
     stats: [
       `等级：${toNum(user?.level)}`,
       `总上传数：${toNum(user?.comicsUploaded)}`,
@@ -192,7 +207,7 @@ export async function toCreatorListItem(user: any) {
         url: `${apiBase}comics?ca=${id}&s=ld&page=1`,
       },
     }),
-    raw: user,
+    raw: user as StringMap,
     extern: {},
   };
 }
@@ -304,7 +319,7 @@ export async function buildHomeAction(category: any, authorization = "") {
   });
 }
 
-export function toHomeChip(label: unknown) {
+export function toHomeChip(label: unknown): FunctionPageChipItem {
   const text = String(label ?? "").trim();
   return {
     label: text,
@@ -320,18 +335,15 @@ export function toActionItem(input: {
   coverUrl?: string;
   coverPath?: string;
   action: Record<string, unknown>;
-  subtitle?: string;
-  badge?: string;
-}) {
+}): FunctionPageActionGridItem {
   return {
     title: input.title,
-    subtitle: input.subtitle ?? "",
-    badge: input.badge ?? "",
     cover: {
       url: String(input.coverUrl ?? ""),
       path: String(input.coverPath ?? ""),
+      extern: {},
     },
-    action: input.action,
+    action: input.action as StringMap,
   };
 }
 

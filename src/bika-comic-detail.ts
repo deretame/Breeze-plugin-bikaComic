@@ -17,8 +17,17 @@ import { toBool, toNum, toStringMap } from "./bika-utils";
 import { getApiBase } from "./client";
 import { BIKA_PLUGIN_ID } from "./info";
 import { loadPluginSetting } from "./plugin-config";
+import type {
+  ChapterContentContract,
+  ChapterWithPages,
+  ComicDetailContract,
+  ReadSnapshotContract,
+  StringMap,
+} from "../types/type";
 
-export async function getComicDetail(payload: ComicDetailPayload = {}) {
+export async function getComicDetail(
+  payload: ComicDetailPayload = {},
+): Promise<ComicDetailContract> {
   const apiBase = await getApiBase();
   const comicId = String(payload.comicId ?? "").trim();
   if (!comicId) {
@@ -88,7 +97,7 @@ export async function getComicDetail(payload: ComicDetailPayload = {}) {
           ),
           name: String(item?.thumb?.originalName ?? ""),
         }),
-        extension: {
+        extern: {
           unifiedItem,
         },
       };
@@ -130,7 +139,7 @@ export async function getComicDetail(payload: ComicDetailPayload = {}) {
           keyword: String(comic._creator?.name ?? ""),
           url: `${apiBase}comics?ca=${String(comic._creator?._id ?? "")}&s=ld&page=1`,
         }),
-        extension: {},
+        extern: {} as StringMap,
       },
       description: String(comic.description ?? ""),
       cover: createImage({
@@ -179,14 +188,17 @@ export async function getComicDetail(payload: ComicDetailPayload = {}) {
             openSearchAction({ source: BIKA_PLUGIN_ID, keyword: item }),
           ),
         ),
-      ].filter(Boolean),
-      extension: {},
+      ].filter((item): item is NonNullable<typeof item> => item != null),
+      extern: {} as StringMap,
     },
     eps: epsDocs.map((item: any) => ({
       id: String(item?._id ?? ""),
+      requestId: "",
+      logicalKey: "",
+      storageChapterId: "",
       name: String(item?.title ?? ""),
       order: toNum(item?.order),
-      extension: {},
+      extern: {} as StringMap,
     })),
     recommend: recommendItems,
     totalViews: toNum(comic.totalViews),
@@ -198,37 +210,34 @@ export async function getComicDetail(payload: ComicDetailPayload = {}) {
     allowLike: true,
     allowCollected: true,
     allowDownload: true,
-    extension: {},
-  };
-
-  const scheme = {
-    version: "1.0.0",
-    type: "comicDetail",
-    source: BIKA_PLUGIN_ID,
-  };
-
-  const data = {
-    normal,
-    raw: {
-      comicInfo: comic,
-      eps: epsDocs,
-      recommend,
-    },
+    extern: {} as StringMap,
   };
 
   return {
-    source: BIKA_PLUGIN_ID,
+    source: BIKA_PLUGIN_ID as string,
     comicId,
-    extern: payload.extern ?? null,
-    scheme,
-    data,
-  };
+    extern: (payload.extern ?? null) as Record<string, unknown> | null,
+    scheme: {
+      version: "1.0.0" as const,
+      type: "comicDetail" as const,
+      source: BIKA_PLUGIN_ID,
+    },
+    data: {
+      normal,
+      raw: {
+        comicInfo: comic,
+        eps: epsDocs,
+        recommend,
+      },
+    },
+  } satisfies ComicDetailContract;
 }
 
-export async function getChapter(payload: BikaChapterPayload = {}) {
+export async function getChapter(
+  payload: BikaChapterPayload = {},
+): Promise<ChapterContentContract> {
   const apiBase = await getApiBase();
-  const proxy = await loadPluginSetting("network.proxy", "3");
-  void proxy;
+  void (await loadPluginSetting("network.proxy", "3"));
   const comicId = String(payload.comicId ?? "").trim();
   const chapterId = toNum(payload.chapterId, 0);
   if (!comicId) {
@@ -251,14 +260,14 @@ export async function getChapter(payload: BikaChapterPayload = {}) {
       cache: true,
     })) as Record<string, any>;
     const data = result?.data ?? {};
-    const pages = data?.pages ?? {};
+    const pagesData = data?.pages ?? {};
     const ep = data?.ep ?? {};
 
     epId = String(ep.id ?? ep._id ?? epId);
     epName = String(ep.title ?? epName);
-    totalPages = toNum(pages.pages, 1);
+    totalPages = toNum(pagesData.pages, 1);
 
-    const pageDocs = Array.isArray(pages.docs) ? pages.docs : [];
+    const pageDocs = Array.isArray(pagesData.docs) ? pagesData.docs : [];
     for (const doc of pageDocs) {
       docs.push({
         name: String(doc?.media?.originalName ?? ""),
@@ -269,89 +278,78 @@ export async function getChapter(payload: BikaChapterPayload = {}) {
           "comic",
         ),
         id: String(doc?.id ?? ""),
+        extern: {} as StringMap,
       });
     }
 
     page += 1;
   }
 
+  const chapter = {
+    id: epId,
+    requestId: "",
+    logicalKey: "",
+    storageChapterId: "",
+    name: epName,
+    order: chapterId,
+    pages: docs,
+    extern: {} as StringMap,
+  } satisfies ChapterWithPages;
+
   return {
     source: BIKA_PLUGIN_ID,
     comicId,
-    chapterId,
-    extern: payload.extern ?? null,
+    chapterId: String(chapterId),
+    extern: (payload.extern ?? null) as Record<string, unknown> | null,
     scheme: {
-      version: "1.0.0",
-      type: "chapterContent",
+      version: "1.0.0" as const,
+      type: "chapterContent" as const,
       source: BIKA_PLUGIN_ID,
     },
     data: {
-      chapter: {
-        epId,
-        epName,
-        length: docs.length,
-        epPages: String(docs.length),
-        docs,
+      comic: {
+        id: comicId,
+        source: BIKA_PLUGIN_ID,
+        title: epName,
+        extern: {} as StringMap,
       },
+      chapter,
+      chapters: [],
     },
-    chapter: {
-      epId,
-      epName,
-      length: docs.length,
-      epPages: String(docs.length),
-      docs,
-    },
-  };
+  } satisfies ChapterContentContract;
 }
 
-export async function getReadSnapshot(payload: BikaReadSnapshotPayload = {}) {
+export async function getReadSnapshot(
+  payload: BikaReadSnapshotPayload = {},
+): Promise<ReadSnapshotContract> {
   const comicId = String(payload.comicId ?? "").trim();
   if (!comicId) {
     throw new Error("comicId 不能为空");
   }
 
-  const externInput = toStringMap(payload.extern);
-  const externSettings = toStringMap(externInput.settings);
-  const readSettings = {
-    proxy: String(externSettings.proxy ?? externInput.proxy ?? "").trim(),
-    imageQuality: String(
-      externSettings.imageQuality ?? externInput.imageQuality ?? "",
-    ).trim(),
-    authorization: String(
-      externSettings.authorization ?? externInput.authorization ?? "",
-    ).trim(),
-  };
-  void readSettings;
-
   const detail = await getComicDetail({
     comicId,
     extern: payload.extern,
   });
-  const normal = (detail as any)?.data?.normal ?? (detail as any)?.normal ?? {};
+  const normal = toStringMap(toStringMap(detail.data).normal);
+  const comicInfo = toStringMap(normal.comicInfo);
 
   const chapterRefs = (Array.isArray(normal?.eps) ? normal.eps : []).map(
     (ep: any) => ({
       id: String(ep?.id ?? ""),
       name: String(ep?.name ?? ""),
       order: toNum(ep?.order, 0),
-      extern: {
-        ...toStringMap(ep?.extension),
-      },
+      extern: toStringMap(ep?.extern),
     }),
   );
 
   const chapterIdInput = String(payload.chapterId ?? "").trim();
+  const externInput = toStringMap(payload.extern);
   const order = toNum(externInput.order, 0);
-  const byChapterId = chapterRefs.find(
-    (item: any) => String(item.id) === chapterIdInput,
-  );
-  const byRouteOrder = chapterRefs.find(
-    (item: any) => toNum(item.order, 0) === order,
-  );
   const targetChapter =
-    byChapterId ??
-    byRouteOrder ??
-    chapterRefs.find((item: any) => toNum(item.order, 0) > 0) ??
+    chapterRefs.find((item) => String(item.id) === chapterIdInput) ??
+    chapterRefs.find((item) => toNum(item.order, 0) === order) ??
+    chapterRefs.find((item) => toNum(item.order, 0) > 0) ??
     chapterRefs[0];
   const chapterOrder = toNum(
     targetChapter?.order,
@@ -366,75 +364,38 @@ export async function getReadSnapshot(payload: BikaReadSnapshotPayload = {}) {
     chapterId: chapterOrder,
     extern: payload.extern,
   });
-  const chapterData =
-    (chapterBundle as any)?.data?.chapter ??
-    (chapterBundle as any)?.chapter ??
-    {};
-  const pages = (Array.isArray(chapterData?.docs) ? chapterData.docs : []).map(
-    (doc: any) => ({
-      id: String(doc?.id ?? ""),
-      name: String(doc?.name ?? doc?.originalName ?? ""),
-      path: String(doc?.path ?? ""),
-      url: String(doc?.url ?? doc?.fileServer ?? ""),
-      extern: {},
-    }),
-  );
-
-  const comicInfo = normal?.comicInfo ?? {};
+  const chapterData = toStringMap(toStringMap(chapterBundle.data).chapter);
+  const pages = (
+    Array.isArray(chapterData?.pages) ? chapterData.pages : []
+  ).map((doc: any) => ({
+    id: String(doc?.id ?? ""),
+    name: String(doc?.name ?? doc?.originalName ?? ""),
+    path: String(doc?.path ?? ""),
+    url: String(doc?.url ?? doc?.fileServer ?? ""),
+    extern: toStringMap(doc?.extern),
+  }));
 
   return {
     source: BIKA_PLUGIN_ID,
-    extern: payload.extern ?? null,
+    extern: (payload.extern ?? null) as Record<string, unknown> | null,
     data: {
       comic: {
-        id: String(comicInfo?.id ?? comicId),
+        id: String(comicInfo.id ?? comicId),
         source: BIKA_PLUGIN_ID,
-        title: String(comicInfo?.title ?? ""),
-        description: String(comicInfo?.description ?? ""),
-        cover: {
-          ...(comicInfo?.cover ?? {}),
-          extern: toStringMap(comicInfo?.cover?.extension),
-        },
-        creator: {
-          ...(comicInfo?.creator ?? {}),
-          avatar: {
-            ...(comicInfo?.creator?.avatar ?? {}),
-            extern: toStringMap(comicInfo?.creator?.avatar?.extension),
-          },
-          extern: toStringMap(comicInfo?.creator?.extension),
-        },
-        titleMeta: (Array.isArray(comicInfo?.titleMeta)
-          ? comicInfo.titleMeta
-          : []
-        ).map((item: any) => ({
-          name: String(item?.name ?? ""),
-          onTap: toStringMap(item?.onTap),
-          extern: toStringMap(item?.extension),
-        })),
-        metadata: (Array.isArray(comicInfo?.metadata)
-          ? comicInfo.metadata
-          : []
-        ).map((meta: any) => ({
-          type: String(meta?.type ?? ""),
-          name: String(meta?.name ?? ""),
-          value: (Array.isArray(meta?.value) ? meta.value : []).map(
-            (item: any) => ({
-              name: String(item?.name ?? ""),
-              onTap: toStringMap(item?.onTap),
-              extern: toStringMap(item?.extension),
-            }),
-          ),
-        })),
-        extern: toStringMap(comicInfo?.extension),
+        title: String(comicInfo.title ?? ""),
+        extern: toStringMap(comicInfo.extern),
       },
       chapter: {
-        id: String(chapterData?.epId ?? targetChapter?.id ?? ""),
-        name: String(chapterData?.epName ?? targetChapter?.name ?? ""),
-        order: toNum(targetChapter?.order, chapterOrder),
+        id: String(targetChapter?.id ?? ""),
+        requestId: "",
+        logicalKey: "",
+        storageChapterId: "",
+        name: String(targetChapter?.name ?? ""),
+        order: chapterOrder,
         pages,
-        extern: {},
+        extern: {} as StringMap,
       },
       chapters: chapterRefs,
     },
-  };
+  } satisfies ReadSnapshotContract;
 }

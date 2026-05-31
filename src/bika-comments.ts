@@ -9,8 +9,14 @@ import {
 } from "./bika-utils";
 import { getApiBase } from "./client";
 import { BIKA_PLUGIN_ID } from "./info";
+import type {
+  CommentFeedContract,
+  CommentItem,
+  CommentMutationContract,
+  CommentRepliesContract,
+} from "../types/type";
 
-export async function mapBikaCommentItem(item: any) {
+async function mapBikaCommentItem(item: any): Promise<CommentItem> {
   const id = String(item?._id ?? item?.id ?? "");
   const user = item?._user ?? {};
   const avatar = user?.avatar ?? {};
@@ -38,7 +44,9 @@ export async function mapBikaCommentItem(item: any) {
   };
 }
 
-export async function getCommentFeed(payload: BikaCommentFeedPayload = {}) {
+export async function getCommentFeed(
+  payload: BikaCommentFeedPayload = {},
+): Promise<CommentFeedContract> {
   const apiBase = await getApiBase();
   const comicId = String(payload.comicId ?? "").trim();
   const page = Math.max(1, toNum(payload.page, 1));
@@ -78,7 +86,6 @@ export async function getCommentFeed(payload: BikaCommentFeedPayload = {}) {
         reply: true,
       },
       paging: {
-        page: currentPage,
         hasReachedMax: currentPage >= totalPages,
       },
       topItems,
@@ -87,7 +94,9 @@ export async function getCommentFeed(payload: BikaCommentFeedPayload = {}) {
   };
 }
 
-export async function loadCommentReplies(payload: BikaCommentFeedPayload = {}) {
+export async function loadCommentReplies(
+  payload: BikaCommentFeedPayload = {},
+): Promise<CommentRepliesContract> {
   const apiBase = await getApiBase();
   const commentId = String(
     payload.commentId ?? payload.extern?.commentId ?? "",
@@ -121,7 +130,6 @@ export async function loadCommentReplies(payload: BikaCommentFeedPayload = {}) {
     data: {
       commentId,
       paging: {
-        page: currentPage,
         hasReachedMax: currentPage >= totalPages,
       },
       items,
@@ -129,7 +137,9 @@ export async function loadCommentReplies(payload: BikaCommentFeedPayload = {}) {
   };
 }
 
-export async function postComment(payload: BikaCommentFeedPayload = {}) {
+export async function postComment(
+  payload: BikaCommentFeedPayload = {},
+): Promise<CommentMutationContract> {
   const apiBase = await getApiBase();
   const comicId = String(payload.comicId ?? "").trim();
   const content = String(payload.content ?? "").trim();
@@ -169,7 +179,9 @@ export async function postComment(payload: BikaCommentFeedPayload = {}) {
   };
 }
 
-export async function postCommentReply(payload: BikaCommentFeedPayload = {}) {
+export async function postCommentReply(
+  payload: BikaCommentFeedPayload = {},
+): Promise<CommentMutationContract> {
   const apiBase = await getApiBase();
   const commentId = String(
     payload.commentId ?? payload.extern?.commentId ?? "",

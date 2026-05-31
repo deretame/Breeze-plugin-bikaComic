@@ -16,6 +16,11 @@ import {
 import { BIKA_PLUGIN_ID } from "./info";
 import { loadPluginSetting, savePluginSetting } from "./plugin-config";
 import { cache, flutterTools } from "./tools";
+import type {
+  CapabilitiesBundleContract,
+  SettingsBundleContract,
+  UserInfoBundleContract,
+} from "../types/type";
 
 export { loadPluginSetting } from "./plugin-config";
 
@@ -54,7 +59,7 @@ let bikaAuthFlowStarted = false;
 let bikaAuthFlowRunning = false;
 let apiBaseChecked = false;
 
-export async function getSettingsBundle() {
+export async function getSettingsBundle(): Promise<SettingsBundleContract> {
   const cachedApiBase = await readApiBaseFromCache();
   if (cachedApiBase) {
     setApiBase(cachedApiBase);
@@ -197,7 +202,7 @@ export async function saveSettings(
   };
 }
 
-export async function getUserInfoBundle() {
+export async function getUserInfoBundle(): Promise<UserInfoBundleContract> {
   const apiBase = await getApiBase();
   const profile = await bikaRequest({
     url: `${apiBase}users/profile`,
@@ -226,6 +231,7 @@ export async function getUserInfoBundle() {
         url: avatarUrl,
         name: String(avatar?.originalName ?? ""),
         path: sanitizePath(avatarPath),
+        extern: {},
       },
       lines: [
         `${String(user?.name ?? "")} (${String(user?.slogan ?? "")})`,
@@ -432,12 +438,12 @@ export async function init() {
   };
 }
 
-export async function getCapabilitiesBundle() {
+export async function getCapabilitiesBundle(): Promise<CapabilitiesBundleContract> {
   return {
     source: BIKA_PLUGIN_ID,
     scheme: {
-      version: "1.0.0",
-      type: "advancedActions",
+      version: "1.0.0" as const,
+      type: "capabilities" as const,
       actions: [
         {
           key: "clear_cache",

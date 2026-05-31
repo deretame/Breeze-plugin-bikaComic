@@ -30,8 +30,17 @@ import {
 import { getApiBase } from "./client";
 import { BIKA_PLUGIN_ID } from "./info";
 import { loadPluginSetting } from "./plugin-config";
+import type {
+  FunctionPageContract,
+  ListFavoriteFoldersResult,
+  SearchResultContract,
+  ToggleFavoriteResult,
+  ToggleLikeResult,
+} from "../types/type";
 
-export async function searchComic(payload: BikaSearchPayload = {}) {
+export async function searchComic(
+  payload: BikaSearchPayload = {},
+): Promise<SearchResultContract> {
   const apiBase = await getApiBase();
   console.log(payload);
   const payloadMap = toStringMap(payload);
@@ -145,8 +154,8 @@ export async function searchComic(payload: BikaSearchPayload = {}) {
   });
 
   const scheme = {
-    version: "1.0.0",
-    type: "searchResult",
+    version: "1.0.0" as const,
+    type: "searchResult" as const,
     source: BIKA_PLUGIN_ID,
     list: "comicGrid",
   };
@@ -189,7 +198,9 @@ export async function searchComic(payload: BikaSearchPayload = {}) {
   };
 }
 
-export async function getHomeData(payload: BikaHomePayload = {}) {
+export async function getHomeData(
+  payload: BikaHomePayload = {},
+): Promise<FunctionPageContract> {
   const apiBase = await getApiBase();
   const [categoriesResponse, keywordsResponse] = await Promise.all([
     bikaRequest({
@@ -247,23 +258,15 @@ export async function getHomeData(payload: BikaHomePayload = {}) {
 
   return {
     source: BIKA_PLUGIN_ID,
-    extern: payload.extern ?? null,
     scheme: {
-      version: "1.0.0",
-      type: "page",
+      version: "1.0.0" as const,
+      type: "page" as const,
       title: "哔咔漫画",
       body: {
-        type: "list",
-        direction: "vertical",
+        type: "list" as const,
         children: [
-          {
-            type: "chip-list",
-            key: "keywords",
-          },
-          {
-            type: "action-grid",
-            key: "navItems",
-          },
+          { type: "chip-list" as const, key: "keywords" },
+          { type: "action-grid" as const, key: "navItems" },
         ],
       },
     },
@@ -275,7 +278,9 @@ export async function getHomeData(payload: BikaHomePayload = {}) {
   };
 }
 
-export async function getFavoriteData(payload: BikaFavoritePayload = {}) {
+export async function getFavoriteData(
+  payload: BikaFavoritePayload = {},
+): Promise<SearchResultContract> {
   const apiBase = await getApiBase();
   const page = Math.max(1, toNum(payload.page, 1));
   const extern = toStringMap(payload.extern);
@@ -303,9 +308,10 @@ export async function getFavoriteData(payload: BikaFavoritePayload = {}) {
     source: BIKA_PLUGIN_ID,
     extern: payload.extern ?? null,
     scheme: {
-      version: "1.0.0",
-      type: "favoriteFeed",
-      card: "comic",
+      version: "1.0.0" as const,
+      type: "searchResult" as const,
+      source: BIKA_PLUGIN_ID,
+      list: "comicGrid",
     },
     data: {
       paging: {
@@ -315,12 +321,20 @@ export async function getFavoriteData(payload: BikaFavoritePayload = {}) {
         hasReachedMax: currentPage >= pages,
       },
       items,
-      raw,
     },
+    paging: {
+      page: currentPage,
+      pages,
+      total: toNum(comics.total, docs.length),
+      hasReachedMax: currentPage >= pages,
+    },
+    items,
   };
 }
 
-export async function toggleLike(payload: BikaLikePayload = {}) {
+export async function toggleLike(
+  payload: BikaLikePayload = {},
+): Promise<ToggleLikeResult> {
   const apiBase = await getApiBase();
   const comicId = String(payload.comicId ?? "").trim();
   if (!comicId) {
@@ -338,7 +352,9 @@ export async function toggleLike(payload: BikaLikePayload = {}) {
   };
 }
 
-export async function toggleFavorite(payload: BikaToggleFavoritePayload = {}) {
+export async function toggleFavorite(
+  payload: BikaToggleFavoritePayload = {},
+): Promise<ToggleFavoriteResult> {
   const apiBase = await getApiBase();
   const comicId = String(payload.comicId ?? "").trim();
   if (!comicId) {
@@ -352,11 +368,13 @@ export async function toggleFavorite(payload: BikaToggleFavoritePayload = {}) {
 
   return {
     favorited: !Boolean(payload.currentFavorite),
-    nextStep: "none",
+    nextStep: "none" as const,
   };
 }
 
-export async function listFavoriteFolders(_: BikaFavoriteFolderPayload = {}) {
+export async function listFavoriteFolders(
+  _: BikaFavoriteFolderPayload = {},
+): Promise<ListFavoriteFoldersResult> {
   return {
     items: [],
   };
@@ -368,7 +386,9 @@ export async function moveFavoriteToFolder(_: BikaFavoriteFolderPayload = {}) {
   };
 }
 
-export async function getFunctionPage(payload: Record<string, unknown> = {}) {
+export async function getFunctionPage(
+  payload: Record<string, unknown> = {},
+): Promise<FunctionPageContract> {
   const id = String(
     payload.id ??
       toStringMap(payload.core).id ??
@@ -386,9 +406,8 @@ export async function getFunctionPage(payload: Record<string, unknown> = {}) {
         type: "page",
         title: "热搜",
         body: {
-          type: "list",
-          direction: "vertical",
-          children: [{ type: "chip-list", key: "items" }],
+          type: "list" as const,
+          children: [{ type: "chip-list" as const, key: "items" }],
         },
       },
       data: {
@@ -428,9 +447,8 @@ export async function getFunctionPage(payload: Record<string, unknown> = {}) {
         type: "page",
         title: "导航",
         body: {
-          type: "list",
-          direction: "vertical",
-          children: [{ type: "action-grid", key: "items" }],
+          type: "list" as const,
+          children: [{ type: "action-grid" as const, key: "items" }],
         },
       },
       data: {

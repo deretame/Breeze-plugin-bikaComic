@@ -7,18 +7,23 @@ import {
 import { BIKA_SEARCH_CATEGORY_OPTIONS } from "./bika-constants";
 import { toNum, toStringMap } from "./bika-utils";
 import { BIKA_PLUGIN_ID } from "./info";
+import type {
+  AdvancedSearchContract,
+  ComicListSceneBundleContract,
+  FilterBundleContract,
+} from "../types/type";
 
-export async function getCloudFavoriteFilterBundle() {
+export async function getCloudFavoriteFilterBundle(): Promise<FilterBundleContract> {
   return {
     source: BIKA_PLUGIN_ID,
     scheme: {
-      version: "1.0.0",
-      type: "rankingFilter",
+      version: "1.0.0" as const,
+      type: "rankingFilter" as const,
       title: "云端收藏筛选",
       fields: [
         {
           key: "order",
-          kind: "choice",
+          kind: "choice" as const,
           label: "排序",
           options: [
             {
@@ -43,19 +48,19 @@ export async function getCloudFavoriteFilterBundle() {
   };
 }
 
-export async function getCloudFavoriteSceneBundle() {
+export async function getCloudFavoriteSceneBundle(): Promise<ComicListSceneBundleContract> {
   return {
     source: BIKA_PLUGIN_ID,
     scheme: {
-      version: "1.0.0",
-      type: "comicListSceneBundle",
+      version: "1.0.0" as const,
+      type: "comicListSceneBundle" as const,
     },
     data: {
       scene: {
         title: "云端收藏",
         source: BIKA_PLUGIN_ID,
         body: {
-          type: "pluginPagedComicList",
+          type: "pluginPagedComicList" as const,
           request: {
             fnPath: "getFavoriteData",
             core: {},
@@ -76,19 +81,19 @@ export async function getCloudFavoriteSceneBundle() {
   };
 }
 
-export async function getComicListSceneBundle() {
+export async function getComicListSceneBundle(): Promise<ComicListSceneBundleContract> {
   return {
     source: BIKA_PLUGIN_ID,
     scheme: {
-      version: "1.0.0",
-      type: "comicListSceneBundle",
+      version: "1.0.0" as const,
+      type: "comicListSceneBundle" as const,
     },
     data: {
       scene: {
         title: "哔咔排行榜",
         source: BIKA_PLUGIN_ID,
         body: {
-          type: "pluginPagedComicList",
+          type: "pluginPagedComicList" as const,
           request: {
             fnPath: "getRankingData",
             core: {
@@ -111,17 +116,17 @@ export async function getComicListSceneBundle() {
   };
 }
 
-export async function getRankingFilterBundle() {
+export async function getRankingFilterBundle(): Promise<FilterBundleContract> {
   return {
     source: BIKA_PLUGIN_ID,
     scheme: {
-      version: "1.0.0",
-      type: "rankingFilter",
+      version: "1.0.0" as const,
+      type: "rankingFilter" as const,
       title: "筛选排行榜",
       fields: [
         {
           key: "ranking",
-          kind: "choice",
+          kind: "choice" as const,
           label: "榜单",
           options: getBikaRankingOptions(),
         },
@@ -137,7 +142,7 @@ export async function getRankingFilterBundle() {
 
 export async function getAdvancedSearchScheme(
   payload: { extern?: Record<string, unknown> } = {},
-) {
+): Promise<AdvancedSearchContract> {
   const extern = toStringMap(payload.extern);
   const categories = BIKA_SEARCH_CATEGORY_OPTIONS;
 
@@ -149,12 +154,12 @@ export async function getAdvancedSearchScheme(
   return {
     source: BIKA_PLUGIN_ID,
     scheme: {
-      version: "1.0.0",
-      type: "advancedSearch",
+      version: "1.0.0" as const,
+      type: "advancedSearch" as const,
       fields: [
         {
           key: "sortBy",
-          kind: "choice",
+          kind: "choice" as const,
           label: "排序",
           options: [
             { label: "最新", value: 1 },
@@ -165,7 +170,7 @@ export async function getAdvancedSearchScheme(
         },
         {
           key: "categories",
-          kind: "multiChoice",
+          kind: "multiChoice" as const,
           label: "分类选择",
           options: categories.map((item: string) => ({
             label: item,
@@ -174,7 +179,7 @@ export async function getAdvancedSearchScheme(
         },
         {
           key: "blockedCategories",
-          kind: "multiChoice",
+          kind: "multiChoice" as const,
           label: "屏蔽分类",
           options: categories.map((item: string) => ({
             label: item,

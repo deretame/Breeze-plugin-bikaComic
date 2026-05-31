@@ -51,7 +51,7 @@ setUnauthorizedSchemeProvider(async () => {
   return bundle as Record<string, unknown>;
 });
 
-async function getInfo() {
+async function getInfo(): Promise<ReturnType<typeof buildManifestInfo>> {
   return buildManifestInfo();
 }
 

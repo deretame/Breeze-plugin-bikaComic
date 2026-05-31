@@ -3,8 +3,11 @@ import { bikaRequest } from "./bika-request";
 import type { BikaRankingPayload } from "./bika-types";
 import { getApiBase } from "./client";
 import { BIKA_PLUGIN_ID } from "./info";
+import type { ComicPagedListContract } from "../types/type";
 
-export async function getRankingData(payload: BikaRankingPayload = {}) {
+export async function getRankingData(
+  payload: BikaRankingPayload = {},
+): Promise<ComicPagedListContract> {
   const apiBase = await getApiBase();
   const days = String(payload.days ?? "H24");
   const type = String(payload.type ?? "comic");
@@ -49,5 +52,5 @@ export async function getRankingData(payload: BikaRankingPayload = {}) {
       items,
       raw,
     },
-  };
+  } as ComicPagedListContract;
 }
