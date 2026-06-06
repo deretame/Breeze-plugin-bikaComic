@@ -1,8 +1,8 @@
 {
   "name": "breeze-plugin-bika-comic",
-  "version": "0.0.8",
+  "version": "0.0.9",
   "type": "module",
-  "packageManager": "pnpm@10.27.0",
+  "packageManager": "pnpm@11.5.2",
   "files": [
     "dist"
   ],
