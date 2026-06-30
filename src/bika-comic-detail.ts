@@ -193,7 +193,7 @@ export async function getComicDetail(
     },
     eps: epsDocs.map((item: any) => ({
       id: String(item?._id ?? ""),
-      requestId: "",
+      requestId: String(toNum(item?.order)),
       logicalKey: "",
       storageChapterId: "",
       name: String(item?.title ?? ""),
