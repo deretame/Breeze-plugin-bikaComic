@@ -1,3 +1,10 @@
+import type {
+  FunctionPageContract,
+  ListFavoriteFoldersResult,
+  SearchResultContract,
+  ToggleFavoriteResult,
+  ToggleLikeResult,
+} from "breeze-plugin-kit";
 import {
   boolKeyList,
   buildHomeAction,
@@ -30,13 +37,6 @@ import {
 import { getApiBase } from "./client";
 import { BIKA_PLUGIN_ID } from "./info";
 import { loadPluginSetting } from "./plugin-config";
-import type {
-  FunctionPageContract,
-  ListFavoriteFoldersResult,
-  SearchResultContract,
-  ToggleFavoriteResult,
-  ToggleLikeResult,
-} from "../types/type";
 
 export async function searchComic(
   payload: BikaSearchPayload = {},

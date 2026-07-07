@@ -1,3 +1,10 @@
+import type {
+  ChapterContentContract,
+  ChapterWithPages,
+  ComicDetailContract,
+  ReadSnapshotContract,
+  StringMap,
+} from "breeze-plugin-kit";
 import {
   createActionItem,
   createImage,
@@ -17,13 +24,6 @@ import { toBool, toNum, toStringMap } from "./bika-utils";
 import { getApiBase } from "./client";
 import { BIKA_PLUGIN_ID } from "./info";
 import { loadPluginSetting } from "./plugin-config";
-import type {
-  ChapterContentContract,
-  ChapterWithPages,
-  ComicDetailContract,
-  ReadSnapshotContract,
-  StringMap,
-} from "../types/type";
 
 export async function getComicDetail(
   payload: ComicDetailPayload = {},

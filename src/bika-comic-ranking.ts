@@ -1,9 +1,9 @@
+import type { ComicPagedListContract } from "breeze-plugin-kit";
 import { toComicListItem, toCreatorListItem } from "./bika-comic-shared";
 import { bikaRequest } from "./bika-request";
 import type { BikaRankingPayload } from "./bika-types";
 import { getApiBase } from "./client";
 import { BIKA_PLUGIN_ID } from "./info";
-import type { ComicPagedListContract } from "../types/type";
 
 export async function getRankingData(
   payload: BikaRankingPayload = {},

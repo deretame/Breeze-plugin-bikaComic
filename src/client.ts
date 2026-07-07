@@ -1,7 +1,6 @@
 import axios, { AxiosHeaders } from "axios";
-import { runtime } from "../types/runtime-api";
+import { cache, hostRuntime } from "breeze-plugin-kit";
 import { loadPluginSetting } from "./plugin-config";
-import { cache } from "./tools";
 
 type UnauthorizedErrorPayload = {
   type: "unauthorized";
@@ -162,7 +161,7 @@ export function buildCacheKey(payload: ClientPayload, method: string): string {
   const qualityForKey = payload.imageQuality ?? payload.settings?.imageQuality;
   const normalizedUrl = normalizeRequestUrlForKey(payload.url);
   const rawKey = `${method}|${normalizedUrl}|${normalizeForKey(payload.body)}|${String(authForKey || "")}|${String(qualityForKey || "")}`;
-  const digest = runtime.crypto
+  const digest = hostRuntime.crypto
     .createHash("sha256")
     .update(rawKey)
     .digest("hex") as string;
@@ -176,7 +175,7 @@ function nowSeconds(): number {
 function randomHex(len: number): string {
   let out = "";
   while (out.length < len) {
-    out += runtime.uuidv4().split("-").join("");
+    out += hostRuntime.uuidv4().split("-").join("");
   }
   return out.slice(0, len);
 }
@@ -212,7 +211,7 @@ function createSignature(
   method: string,
 ): string {
   const raw = `${path}${timestamp}${nonce}${method}${API_KEY}`.toLowerCase();
-  return runtime.crypto
+  return hostRuntime.crypto
     .createHmac("sha256", SECRET_KEY)
     .update(raw)
     .digest("hex") as string;
