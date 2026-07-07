@@ -1,9 +1,3 @@
-import { buildBikaImageUrl } from "./bika-image";
-import type { RankingFilterOption } from "./bika-types";
-import { sanitizePath, toBool, toNum, toStrList } from "./bika-utils";
-import { getApiBase } from "./client";
-import { BIKA_PLUGIN_ID } from "./info";
-import { loadPluginSetting, savePluginSetting } from "./plugin-config";
 import type {
   ActionItem,
   ComicListItem,
@@ -12,7 +6,13 @@ import type {
   ImageItem,
   MetadataListItem,
   StringMap,
-} from "../types/type";
+} from "breeze-plugin-kit";
+import { buildBikaImageUrl } from "./bika-image";
+import type { RankingFilterOption } from "./bika-types";
+import { sanitizePath, toBool, toNum, toStrList } from "./bika-utils";
+import { getApiBase } from "./client";
+import { BIKA_PLUGIN_ID } from "./info";
+import { loadPluginSetting, savePluginSetting } from "./plugin-config";
 
 export const runtimeSelectedCategories: string[] = [];
 

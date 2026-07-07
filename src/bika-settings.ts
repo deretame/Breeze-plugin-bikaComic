@@ -2,7 +2,8 @@ import type {
   CapabilitiesBundleContract,
   SettingsBundleContract,
   UserInfoBundleContract,
-} from "../types/type";
+} from "breeze-plugin-kit";
+import { cache, flutterTools } from "breeze-plugin-kit";
 import {
   BIKA_HOME_CATEGORY_OPTIONS,
   BIKA_SEARCH_CATEGORY_OPTIONS,
@@ -20,7 +21,6 @@ import {
 } from "./client";
 import { BIKA_PLUGIN_ID } from "./info";
 import { loadPluginSetting, savePluginSetting } from "./plugin-config";
-import { cache, flutterTools } from "./tools";
 
 export { loadPluginSetting } from "./plugin-config";
 

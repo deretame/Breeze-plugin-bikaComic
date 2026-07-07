@@ -1,3 +1,8 @@
+import type {
+  AdvancedSearchContract,
+  ComicListSceneBundleContract,
+  FilterBundleContract,
+} from "breeze-plugin-kit";
 import {
   boolKeyList,
   getBikaRankingOptions,
@@ -7,11 +12,6 @@ import {
 import { BIKA_SEARCH_CATEGORY_OPTIONS } from "./bika-constants";
 import { toNum, toStringMap } from "./bika-utils";
 import { BIKA_PLUGIN_ID } from "./info";
-import type {
-  AdvancedSearchContract,
-  ComicListSceneBundleContract,
-  FilterBundleContract,
-} from "../types/type";
 
 export async function getCloudFavoriteFilterBundle(): Promise<FilterBundleContract> {
   return {

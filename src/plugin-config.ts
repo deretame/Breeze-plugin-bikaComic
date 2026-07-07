@@ -1,4 +1,4 @@
-import { pluginConfig } from "./tools";
+import { pluginConfig } from "breeze-plugin-kit";
 
 export async function loadPluginSetting(key: string, fallback: unknown) {
   const raw = await pluginConfig.load(key, JSON.stringify(fallback));

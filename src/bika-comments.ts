@@ -1,3 +1,9 @@
+import type {
+  CommentFeedContract,
+  CommentItem,
+  CommentMutationContract,
+  CommentRepliesContract,
+} from "breeze-plugin-kit";
 import { buildBikaImageUrl } from "./bika-image";
 import { bikaRequest } from "./bika-request";
 import type { BikaCommentFeedPayload } from "./bika-types";
@@ -9,12 +15,6 @@ import {
 } from "./bika-utils";
 import { getApiBase } from "./client";
 import { BIKA_PLUGIN_ID } from "./info";
-import type {
-  CommentFeedContract,
-  CommentItem,
-  CommentMutationContract,
-  CommentRepliesContract,
-} from "../types/type";
 
 async function mapBikaCommentItem(item: any): Promise<CommentItem> {
   const id = String(item?._id ?? item?.id ?? "");
