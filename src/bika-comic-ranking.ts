@@ -1,7 +1,8 @@
-import type { ComicPagedListContract } from "breeze-plugin-kit";
+import type { ComicPagedListContract, StringMap } from "breeze-plugin-kit";
 import { toComicListItem, toCreatorListItem } from "./bika-comic-shared";
 import { bikaRequest } from "./bika-request";
 import type { BikaRankingPayload } from "./bika-types";
+import { toStringMap } from "./bika-utils";
 import { getApiBase } from "./client";
 import { BIKA_PLUGIN_ID } from "./info";
 
@@ -25,16 +26,19 @@ export async function getRankingData(
     cache: true,
   });
 
+  const rawData = toStringMap(toStringMap(raw).data);
   const items = await Promise.all(
     type === "creator"
-      ? (Array.isArray((raw as any)?.data?.users)
-          ? (raw as any).data.users
-          : []
-        ).map(async (item: any) => await toCreatorListItem(item))
-      : (Array.isArray((raw as any)?.data?.comics)
-          ? (raw as any).data.comics
-          : []
-        ).map(async (item: any) => await toComicListItem(item)),
+      ? (Array.isArray(rawData.users) ? rawData.users : [])
+          .filter(
+            (item): item is StringMap => !!item && typeof item === "object" && !Array.isArray(item),
+          )
+          .map(async (item: StringMap) => await toCreatorListItem(item))
+      : (Array.isArray(rawData.comics) ? rawData.comics : [])
+          .filter(
+            (item): item is StringMap => !!item && typeof item === "object" && !Array.isArray(item),
+          )
+          .map(async (item: StringMap) => await toComicListItem(item)),
   );
 
   return {

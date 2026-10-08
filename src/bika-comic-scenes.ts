@@ -192,11 +192,8 @@ export async function getAdvancedSearchScheme(
       values: {
         sortBy: selectedSortBy,
         categories:
-          selectedCategories.length > 0
-            ? selectedCategories
-            : getRuntimeSelectedCategories(),
-        blockedCategories:
-          selectedBlocked.length > 0 ? selectedBlocked : blockedCategories,
+          selectedCategories.length > 0 ? selectedCategories : getRuntimeSelectedCategories(),
+        blockedCategories: selectedBlocked.length > 0 ? selectedBlocked : blockedCategories,
       },
     },
   };

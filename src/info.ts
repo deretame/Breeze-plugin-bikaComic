@@ -1,6 +1,9 @@
-export const BIKA_PLUGIN_ID = "0a0e5858-a467-4702-994a-79e608a4589d";
+import type { ComicListScene, InfoContract } from "breeze-plugin-kit";
 
-export function buildRankingScene() {
+export type BikaPluginInfo = InfoContract;
+
+export const BIKA_PLUGIN_ID = "0a0e5858-a467-4702-994a-79e608a4589d";
+export function buildRankingScene(): ComicListScene {
   return {
     title: "哔咔排行榜",
     source: BIKA_PLUGIN_ID,
@@ -26,7 +29,7 @@ export function buildRankingScene() {
   };
 }
 
-export function buildCloudFavoriteScene() {
+export function buildCloudFavoriteScene(): ComicListScene {
   return {
     title: "云端收藏",
     source: BIKA_PLUGIN_ID,
@@ -50,20 +53,15 @@ export function buildCloudFavoriteScene() {
   };
 }
 
-export function buildManifestInfo() {
+export function buildManifestInfo(): BikaPluginInfo {
   return {
     name: "哔咔漫画",
     uuid: BIKA_PLUGIN_ID,
     iconUrl:
       "https://raw.githubusercontent.com/deretame/Breeze-plugin-bikaComic/main/assets/logo_round.webp",
-    creator: {
-      name: "",
-      describe: "",
-    },
     describe: "哔咔漫画插件",
-    version: "0.0.10",
-    updateUrl:
-      "https://api.github.com/repos/deretame/Breeze-plugin-bikaComic/releases/latest",
+    version: "0.0.11",
+    updateUrl: "https://api.github.com/repos/deretame/Breeze-plugin-bikaComic/releases/latest",
     home: "https://github.com/deretame/Breeze-plugin-bikaComic",
     npmName: "breeze-plugin-bika-comic",
     function: [

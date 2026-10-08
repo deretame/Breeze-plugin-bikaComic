@@ -2,12 +2,8 @@
   "name": "哔咔漫画",
   "uuid": "0a0e5858-a467-4702-994a-79e608a4589d",
   "iconUrl": "https://raw.githubusercontent.com/deretame/Breeze-plugin-bikaComic/main/assets/logo_round.webp",
-  "creator": {
-    "name": "",
-    "describe": ""
-  },
   "describe": "哔咔漫画插件",
-  "version": "0.0.10",
+  "version": "0.0.11",
   "updateUrl": "https://api.github.com/repos/deretame/Breeze-plugin-bikaComic/releases/latest",
   "home": "https://github.com/deretame/Breeze-plugin-bikaComic",
   "npmName": "breeze-plugin-bika-comic",
