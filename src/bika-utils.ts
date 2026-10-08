@@ -2,9 +2,7 @@ export function toStrList(value: unknown): string[] {
   if (!Array.isArray(value)) {
     return [];
   }
-  return value
-    .map((item) => String(item ?? ""))
-    .filter((item) => item.trim().length > 0);
+  return value.map((item) => String(item ?? "")).filter((item) => item.trim().length > 0);
 }
 
 export function toNum(value: unknown, fallback = 0): number {

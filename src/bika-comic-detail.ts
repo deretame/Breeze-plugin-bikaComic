@@ -1,5 +1,6 @@
 import type {
   ChapterContentContract,
+  ChapterPage,
   ChapterWithPages,
   ComicDetailContract,
   ReadSnapshotContract,
@@ -15,11 +16,7 @@ import {
 } from "./bika-comic-shared";
 import { buildBikaImageUrl } from "./bika-image";
 import { bikaRequest } from "./bika-request";
-import type {
-  BikaChapterPayload,
-  BikaReadSnapshotPayload,
-  ComicDetailPayload,
-} from "./bika-types";
+import type { BikaChapterPayload, BikaReadSnapshotPayload, ComicDetailPayload } from "./bika-types";
 import { toBool, toNum, toStringMap } from "./bika-utils";
 import { getApiBase } from "./client";
 import { BIKA_PLUGIN_ID } from "./info";
@@ -37,10 +34,10 @@ export async function getComicDetail(
   const infoResponse = (await bikaRequest({
     url: `${apiBase}comics/${comicId}`,
     method: "GET",
-  })) as Record<string, any>;
+  })) as StringMap;
 
-  const comic = (infoResponse?.data?.comic ?? {}) as Record<string, any>;
-  ensureBikaComicShape(comic);
+  const comic: StringMap = toStringMap(toStringMap(infoResponse.data).comic);
+  ensureBikaComicShape(comic as Record<string, unknown>);
 
   const epsCount = toNum(comic.epsCount, 0);
   const totalPages = Math.max(1, Math.ceil(epsCount / 40 + 1));
@@ -54,52 +51,49 @@ export async function getComicDetail(
     ),
   );
 
-  const epsDocs = epsResponses
-    .flatMap((item: any) => item?.data?.eps?.docs ?? [])
-    .sort((a: any, b: any) => toNum(a?.order) - toNum(b?.order));
+  const epsDocs: StringMap[] = epsResponses
+    .flatMap((item) => toStringMap(toStringMap(toStringMap(item).data).eps).docs ?? [])
+    .filter((item): item is StringMap => !!item && typeof item === "object" && !Array.isArray(item))
+    .sort((a, b) => toNum(a.order) - toNum(b.order));
 
   const recommendResponse = (await bikaRequest({
     url: `${apiBase}comics/${comicId}/recommendation`,
     method: "GET",
     cache: true,
-  })) as Record<string, any>;
+  })) as StringMap;
 
-  const recommend = (recommendResponse?.data?.comics ?? []).map((item: any) => {
-    const next = { ...item };
-    next.author ??= "";
-    next.likesCount = toNum(next.likesCount, 0);
-    next.thumb ??= {};
-    next.thumb.fileServer ??= "";
-    next.thumb.path ??= "";
-    next.thumb.originalName ??= "";
-    return next;
-  });
-
+  const recommendRaw = toStringMap(recommendResponse.data).comics;
+  const recommend: StringMap[] = (Array.isArray(recommendRaw) ? recommendRaw : [])
+    .filter((item): item is StringMap => !!item && typeof item === "object" && !Array.isArray(item))
+    .map((item: StringMap) => {
+      const next: StringMap = { ...item };
+      next.author ??= "";
+      next.likesCount = toNum(next.likesCount, 0);
+      const thumb = toStringMap(next.thumb);
+      thumb.fileServer ??= "";
+      thumb.path ??= "";
+      thumb.originalName ??= "";
+      next.thumb = thumb;
+      return next;
+    });
   const recommendItems = await Promise.all(
-    recommend.map(async (item: any) => {
-      const unifiedItem = await toComicListItem(item, {
+    recommend.map(async (item: StringMap) => {
+      const unified = await toComicListItem(item, {
         pictureType: "cover",
       });
       return {
-        source: BIKA_PLUGIN_ID,
-        id: String(item?._id ?? item?.id ?? ""),
-        title: String(item?.title ?? ""),
-        cover: createImage({
-          id: String(item?._id ?? item?.id ?? ""),
-          url: await buildBikaImageUrl(
-            item?.thumb?.fileServer,
-            item?.thumb?.path,
-            "cover",
-          ),
-          path: String(item?.thumb?.path ?? "").replace(
-            /[^a-zA-Z0-9_\-.]/g,
-            "_",
-          ),
-          name: String(item?.thumb?.originalName ?? ""),
-        }),
-        extern: {
-          unifiedItem,
-        },
+        source: unified.source,
+        id: unified.id,
+        title: unified.title,
+        subtitle: unified.subtitle,
+        finished: unified.finished,
+        likesCount: unified.likesCount,
+        viewsCount: unified.viewsCount,
+        updatedAt: unified.updatedAt,
+        cover: unified.cover,
+        metadata: unified.metadata,
+        raw: unified.raw,
+        extern: unified.extern,
       };
     }),
   );
@@ -110,94 +104,65 @@ export async function getComicDetail(
       title: String(comic.title ?? ""),
       titleMeta: [
         createActionItem(`浏览：${toNum(comic.totalViews)}`),
-        createActionItem(
-          `更新时间：${String(comic.updated_at ?? new Date().toISOString())}`,
-        ),
+        createActionItem(`更新时间：${String(comic.updated_at ?? new Date().toISOString())}`),
         ...(toNum(comic.pagesCount) > 0
           ? [createActionItem(`页数：${toNum(comic.pagesCount)}`)]
           : []),
         createActionItem(`章节数：${toNum(comic.epsCount)}`),
       ],
       creator: {
-        id: String(comic._creator?._id ?? ""),
-        name: String(comic._creator?.name ?? ""),
+        id: "",
+        name: "",
         avatar: createImage({
-          id: String(comic._creator?._id ?? ""),
-          url: await buildBikaImageUrl(
-            comic._creator?.avatar?.fileServer,
-            comic._creator?.avatar?.path,
-            "creator",
-          ),
-          path: String(comic._creator?.avatar?.path ?? "").replace(
-            /[^a-zA-Z0-9_\-.]/g,
-            "_",
-          ),
-          name: String(comic._creator?.avatar?.originalName ?? ""),
+          id: "",
+          url: "",
+          name: "",
+          path: "",
+          extern: {},
         }),
-        onTap: openSearchAction({
-          source: BIKA_PLUGIN_ID,
-          keyword: String(comic._creator?.name ?? ""),
-          url: `${apiBase}comics?ca=${String(comic._creator?._id ?? "")}&s=ld&page=1`,
-        }),
+        onTap: null,
         extern: {} as StringMap,
       },
       description: String(comic.description ?? ""),
       cover: createImage({
         id: String(comic._id ?? comicId),
         url: await buildBikaImageUrl(
-          comic.thumb?.fileServer,
-          comic.thumb?.path,
+          toStringMap(comic.thumb).fileServer,
+          toStringMap(comic.thumb).path,
           "cover",
         ),
-        path: String(comic.thumb?.path ?? "").replace(/[^a-zA-Z0-9_\-.]/g, "_"),
-        name: String(comic.thumb?.originalName ?? ""),
+        path: String(toStringMap(comic.thumb).path ?? "").replace(/[^a-zA-Z0-9_\-.]/g, "_"),
+        name: String(toStringMap(comic.thumb).originalName ?? ""),
       }),
       metadata: [
         createMetadataActionList("author", "作者", comic.author, (item) =>
+          createActionItem(item, openSearchAction({ source: BIKA_PLUGIN_ID, keyword: item })),
+        ),
+        createMetadataActionList("chineseTeam", "汉化组", comic.chineseTeam, (item) =>
+          createActionItem(item, openSearchAction({ source: BIKA_PLUGIN_ID, keyword: item })),
+        ),
+        createMetadataActionList("categories", "分类", comic.categories, (item) =>
           createActionItem(
             item,
-            openSearchAction({ source: BIKA_PLUGIN_ID, keyword: item }),
+            openSearchAction({
+              source: BIKA_PLUGIN_ID,
+              categories: [item],
+            }),
           ),
-        ),
-        createMetadataActionList(
-          "chineseTeam",
-          "汉化组",
-          comic.chineseTeam,
-          (item) =>
-            createActionItem(
-              item,
-              openSearchAction({ source: BIKA_PLUGIN_ID, keyword: item }),
-            ),
-        ),
-        createMetadataActionList(
-          "categories",
-          "分类",
-          comic.categories,
-          (item) =>
-            createActionItem(
-              item,
-              openSearchAction({
-                source: BIKA_PLUGIN_ID,
-                categories: [item],
-              }),
-            ),
         ),
         createMetadataActionList("tags", "标签", comic.tags, (item) =>
-          createActionItem(
-            item,
-            openSearchAction({ source: BIKA_PLUGIN_ID, keyword: item }),
-          ),
+          createActionItem(item, openSearchAction({ source: BIKA_PLUGIN_ID, keyword: item })),
         ),
       ].filter((item): item is NonNullable<typeof item> => item != null),
       extern: {} as StringMap,
     },
-    eps: epsDocs.map((item: any) => ({
-      id: String(item?._id ?? ""),
-      requestId: String(toNum(item?.order)),
+    eps: epsDocs.map((item: StringMap) => ({
+      id: String(item._id ?? ""),
+      requestId: String(toNum(item.order)),
       logicalKey: "",
       storageChapterId: "",
-      name: String(item?.title ?? ""),
-      order: toNum(item?.order),
+      name: String(item.title ?? ""),
+      order: toNum(item.order),
       extern: {} as StringMap,
     })),
     recommend: recommendItems,
@@ -247,7 +212,7 @@ export async function getChapter(
     throw new Error("chapterId 不能为空");
   }
 
-  const docs: any[] = [];
+  const docs: ChapterPage[] = [];
   let page = 1;
   let totalPages = 1;
   let epId = "";
@@ -258,26 +223,25 @@ export async function getChapter(
       url: `${apiBase}comics/${comicId}/order/${chapterId}/pages?page=${page}`,
       method: "GET",
       cache: true,
-    })) as Record<string, any>;
-    const data = result?.data ?? {};
-    const pagesData = data?.pages ?? {};
-    const ep = data?.ep ?? {};
+    })) as StringMap;
+    const data = toStringMap(result.data);
+    const pagesData = toStringMap(data.pages);
+    const ep = toStringMap(data.ep);
 
     epId = String(ep.id ?? ep._id ?? epId);
     epName = String(ep.title ?? epName);
     totalPages = toNum(pagesData.pages, 1);
 
-    const pageDocs = Array.isArray(pagesData.docs) ? pagesData.docs : [];
+    const pageDocs: StringMap[] = (Array.isArray(pagesData.docs) ? pagesData.docs : []).filter(
+      (item): item is StringMap => !!item && typeof item === "object" && !Array.isArray(item),
+    );
     for (const doc of pageDocs) {
+      const media = toStringMap(doc.media);
       docs.push({
-        name: String(doc?.media?.originalName ?? ""),
-        path: String(doc?.media?.path ?? ""),
-        url: await buildBikaImageUrl(
-          doc?.media?.fileServer,
-          doc?.media?.path,
-          "comic",
-        ),
-        id: String(doc?.id ?? ""),
+        name: String(media.originalName ?? ""),
+        path: String(media.path ?? ""),
+        url: await buildBikaImageUrl(media.fileServer, media.path, "comic"),
+        id: String(doc.id ?? ""),
         extern: {} as StringMap,
       });
     }
@@ -334,14 +298,14 @@ export async function getReadSnapshot(
   const normal = toStringMap(toStringMap(detail.data).normal);
   const comicInfo = toStringMap(normal.comicInfo);
 
-  const chapterRefs = (Array.isArray(normal?.eps) ? normal.eps : []).map(
-    (ep: any) => ({
-      id: String(ep?.id ?? ""),
-      name: String(ep?.name ?? ""),
-      order: toNum(ep?.order, 0),
-      extern: toStringMap(ep?.extern),
-    }),
-  );
+  const chapterRefs = (Array.isArray(normal.eps) ? normal.eps : [])
+    .filter((item): item is StringMap => !!item && typeof item === "object" && !Array.isArray(item))
+    .map((ep: StringMap) => ({
+      id: String(ep.id ?? ""),
+      name: String(ep.name ?? ""),
+      order: toNum(ep.order, 0),
+      extern: toStringMap(ep.extern),
+    }));
 
   const chapterIdInput = String(payload.chapterId ?? "").trim();
   const externInput = toStringMap(payload.extern);
@@ -351,10 +315,7 @@ export async function getReadSnapshot(
     chapterRefs.find((item) => toNum(item.order, 0) === order) ??
     chapterRefs.find((item) => toNum(item.order, 0) > 0) ??
     chapterRefs[0];
-  const chapterOrder = toNum(
-    targetChapter?.order,
-    toNum(chapterIdInput, order),
-  );
+  const chapterOrder = toNum(targetChapter?.order, toNum(chapterIdInput, order));
   if (chapterOrder <= 0) {
     throw new Error("chapterId 不能为空");
   }
@@ -365,14 +326,15 @@ export async function getReadSnapshot(
     extern: payload.extern,
   });
   const chapterData = toStringMap(toStringMap(chapterBundle.data).chapter);
-  const pages = (
-    Array.isArray(chapterData?.pages) ? chapterData.pages : []
-  ).map((doc: any) => ({
-    id: String(doc?.id ?? ""),
-    name: String(doc?.name ?? doc?.originalName ?? ""),
-    path: String(doc?.path ?? ""),
-    url: String(doc?.url ?? doc?.fileServer ?? ""),
-    extern: toStringMap(doc?.extern),
+  const chapterPages: StringMap[] = (
+    Array.isArray(chapterData.pages) ? chapterData.pages : []
+  ).filter((item): item is StringMap => !!item && typeof item === "object" && !Array.isArray(item));
+  const pages = chapterPages.map((doc: StringMap) => ({
+    id: String(doc.id ?? ""),
+    name: String(doc.name ?? doc.originalName ?? ""),
+    path: String(doc.path ?? ""),
+    url: String(doc.url ?? doc.fileServer ?? ""),
+    extern: toStringMap(doc.extern),
   }));
 
   return {

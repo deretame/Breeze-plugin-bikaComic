@@ -1,15 +1,18 @@
 import type {
   ActionItem,
+  ComicInfoPageAction,
   ComicListItem,
   FunctionPageActionGridItem,
   FunctionPageChipItem,
   ImageItem,
   MetadataListItem,
+  OpenSearchAction,
+  PluginAction,
   StringMap,
 } from "breeze-plugin-kit";
 import { buildBikaImageUrl } from "./bika-image";
 import type { RankingFilterOption } from "./bika-types";
-import { sanitizePath, toBool, toNum, toStrList } from "./bika-utils";
+import { sanitizePath, toBool, toNum, toStrList, toStringMap } from "./bika-utils";
 import { getApiBase } from "./client";
 import { BIKA_PLUGIN_ID } from "./info";
 import { loadPluginSetting, savePluginSetting } from "./plugin-config";
@@ -17,22 +20,14 @@ import { loadPluginSetting, savePluginSetting } from "./plugin-config";
 export const runtimeSelectedCategories: string[] = [];
 
 export function setRuntimeSelectedCategories(values: string[]) {
-  runtimeSelectedCategories.splice(
-    0,
-    runtimeSelectedCategories.length,
-    ...values,
-  );
+  runtimeSelectedCategories.splice(0, runtimeSelectedCategories.length, ...values);
 }
 
 export function getRuntimeSelectedCategories() {
   return runtimeSelectedCategories;
 }
 
-function buildMetadata(
-  type: string,
-  name: string,
-  value: unknown,
-): MetadataListItem | null {
+function buildMetadata(type: string, name: string, value: unknown): MetadataListItem | null {
   const list = Array.isArray(value) ? value : value == null ? [] : [value];
   const normalized = list
     .map((item) => String(item ?? "").trim())
@@ -45,18 +40,22 @@ function buildMetadata(
   return {
     type,
     name,
-    value: normalized.map((item) => ({ name: item, onTap: {}, extern: {} })),
+    value: normalized.map((item) => ({
+      name: item,
+      onTap: null,
+      extern: {},
+    })),
   };
 }
 
 export function createActionItem(
   name: unknown,
-  onTap: Record<string, unknown> = {},
+  onTap: ComicInfoPageAction | null = null,
   extern: Record<string, unknown> = {},
 ): ActionItem {
   return {
     name: String(name ?? ""),
-    onTap: onTap as StringMap,
+    onTap,
     extern: extern as StringMap,
   };
 }
@@ -100,24 +99,30 @@ export function createImage(input: {
   };
 }
 
-export function openSearchAction(payload: Record<string, unknown>) {
+type OpenSearchInput = {
+  source?: unknown;
+  keyword?: unknown;
+  url?: unknown;
+  categories?: unknown;
+  mode?: unknown;
+  creatorId?: unknown;
+  extern?: unknown;
+};
+
+export function openSearchAction(payload: OpenSearchInput): OpenSearchAction {
   const source = String(payload.source ?? "").trim();
   const keyword = String(payload.keyword ?? "").trim();
   const inheritedExtern =
-    payload.extern &&
-    typeof payload.extern === "object" &&
-    !Array.isArray(payload.extern)
+    payload.extern && typeof payload.extern === "object" && !Array.isArray(payload.extern)
       ? (payload.extern as Record<string, unknown>)
       : {};
-  const extern = {
+  const extern: StringMap = {
     ...inheritedExtern,
     ...(keyword ? { keyword } : {}),
     ...(typeof payload.url === "string" && payload.url.trim().length
       ? { url: payload.url.trim() }
       : {}),
-    ...(Array.isArray(payload.categories)
-      ? { categories: payload.categories }
-      : {}),
+    ...(Array.isArray(payload.categories) ? { categories: payload.categories } : {}),
     ...(typeof payload.mode === "string" && payload.mode.trim().length
       ? { mode: payload.mode.trim() }
       : {}),
@@ -136,73 +141,63 @@ export function openSearchAction(payload: Record<string, unknown>) {
 }
 
 export async function toComicListItem(
-  comic: any,
+  comic: StringMap,
   options: {
     pictureType?: "cover" | "creator" | "favourite" | "comic";
   } = {},
 ): Promise<ComicListItem> {
-  const id = String(comic?._id ?? comic?.id ?? "");
-  const title = String(comic?.title ?? "");
-  const thumb = comic?.thumb ?? {};
-  const fileServer = String(thumb?.fileServer ?? "");
-  const path = String(thumb?.path ?? "");
+  const id = String(comic._id ?? comic.id ?? "");
+  const title = String(comic.title ?? "");
+  const thumb = toStringMap(comic.thumb);
+  const fileServer = String(thumb.fileServer ?? "");
+  const path = String(thumb.path ?? "");
 
   return {
     source: BIKA_PLUGIN_ID,
     id,
     title,
     subtitle: "",
-    finished: toBool(comic?.finished),
-    likesCount: toNum(comic?.likesCount),
-    viewsCount: toNum(comic?.totalViews ?? comic?.viewsCount),
-    updatedAt: String(comic?.updated_at ?? ""),
+    finished: toBool(comic.finished),
+    likesCount: toNum(comic.likesCount),
+    viewsCount: toNum(comic.totalViews ?? comic.viewsCount),
+    updatedAt: String(comic.updated_at ?? ""),
     cover: {
       id,
-      url: await buildBikaImageUrl(
-        fileServer,
-        path,
-        options.pictureType ?? "cover",
-      ),
+      url: await buildBikaImageUrl(fileServer, path, options.pictureType ?? "cover"),
       path: sanitizePath(path),
-      name: String(thumb?.originalName ?? ""),
+      name: String(thumb.originalName ?? ""),
       extern: {},
     },
     metadata: [
-      buildMetadata("author", "作者", comic?.author),
-      buildMetadata("team", "汉化组", comic?.chineseTeam),
-      buildMetadata("categories", "分类", comic?.categories),
-      buildMetadata("tags", "标签", comic?.tags),
+      buildMetadata("author", "作者", comic.author),
+      buildMetadata("team", "汉化组", comic.chineseTeam),
+      buildMetadata("categories", "分类", comic.categories),
+      buildMetadata("tags", "标签", comic.tags),
     ].filter((item): item is MetadataListItem => item != null),
     raw: comic as StringMap,
     extern: {},
   };
 }
 
-export async function toCreatorListItem(user: any) {
+export async function toCreatorListItem(user: StringMap) {
   const apiBase = await getApiBase();
-  const id = String(user?._id ?? user?.id ?? "");
+  const id = String(user._id ?? user.id ?? "");
+  const avatar = toStringMap(user.avatar);
   return {
     source: BIKA_PLUGIN_ID,
     id,
-    name: String(user?.name ?? ""),
-    subtitle: String(user?.title ?? ""),
+    name: String(user.name ?? ""),
+    subtitle: String(user.title ?? ""),
     cover: {
-      url: await buildBikaImageUrl(
-        user?.avatar?.fileServer,
-        user?.avatar?.path,
-        "creator",
-      ),
-      path: sanitizePath(user?.avatar?.path ?? ""),
+      url: await buildBikaImageUrl(avatar.fileServer, avatar.path, "creator"),
+      path: sanitizePath(String(avatar.path ?? "")),
       extern: {},
     },
     metadata: [] as ActionItem[],
-    stats: [
-      `等级：${toNum(user?.level)}`,
-      `总上传数：${toNum(user?.comicsUploaded)}`,
-    ],
+    stats: [`等级：${toNum(user.level)}`, `总上传数：${toNum(user.comicsUploaded)}`],
     onTap: openSearchAction({
       source: BIKA_PLUGIN_ID,
-      keyword: String(user?.name ?? ""),
+      keyword: String(user.name ?? ""),
       extern: {
         url: `${apiBase}comics?ca=${id}&s=ld&page=1`,
       },
@@ -265,7 +260,10 @@ export function getBikaRankingOptions(): RankingFilterOption[] {
   ];
 }
 
-export async function buildHomeAction(category: any, authorization = "") {
+export async function buildHomeAction(
+  category: StringMap,
+  authorization = "",
+): Promise<PluginAction> {
   const apiBase = await getApiBase();
   const title = String(category?.title ?? "");
   if (title === "最近更新") {
@@ -334,7 +332,7 @@ export function toActionItem(input: {
   title: string;
   coverUrl?: string;
   coverPath?: string;
-  action: Record<string, unknown>;
+  action: PluginAction;
 }): FunctionPageActionGridItem {
   return {
     title: input.title,
@@ -343,15 +341,13 @@ export function toActionItem(input: {
       path: String(input.coverPath ?? ""),
       extern: {},
     },
-    action: input.action as StringMap,
+    action: input.action as unknown as StringMap,
   };
 }
 
 export function boolKeyList(value: unknown): string[] {
   if (Array.isArray(value)) {
-    return value
-      .map((item) => String(item ?? "").trim())
-      .filter((item) => item.length > 0);
+    return value.map((item) => String(item ?? "").trim()).filter((item) => item.length > 0);
   }
   const map =
     value && typeof value === "object" && !Array.isArray(value)

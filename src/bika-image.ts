@@ -15,18 +15,12 @@ export async function buildBikaImageUrl(
     if (pictureType == "cover") {
       url = "https://img.picacomic.com";
     } else if (pictureType == "creator" || pictureType == "favourite") {
-      url =
-        proxy == 1
-          ? "https://storage.diwodiwo.xyz"
-          : "https://s3.picacomic.com";
+      url = proxy == 1 ? "https://storage.diwodiwo.xyz" : "https://s3.picacomic.com";
     } else {
       if (imageQuality != "original") {
         url = "https://img.picacomic.com";
       } else {
-        url =
-          proxy == 1
-            ? "https://storage.diwodiwo.xyz"
-            : "https://s3.picacomic.com";
+        url = proxy == 1 ? "https://storage.diwodiwo.xyz" : "https://s3.picacomic.com";
       }
     }
   } else if (url == "https://storage-b.picacomic.com") {
@@ -41,14 +35,8 @@ export async function buildBikaImageUrl(
     }
   }
 
-  if (
-    path.includes("picacomic-paint.jpg") ||
-    path.includes("picacomic-gift.jpg")
-  ) {
-    url =
-      proxy == 1
-        ? "https://storage.diwodiwo.xyz/static"
-        : "https://s3.picacomic.com/static";
+  if (path.includes("picacomic-paint.jpg") || path.includes("picacomic-gift.jpg")) {
+    url = proxy == 1 ? "https://storage.diwodiwo.xyz/static" : "https://s3.picacomic.com/static";
   }
 
   if (path.includes("tobeimg/")) {

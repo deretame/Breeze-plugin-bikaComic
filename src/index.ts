@@ -1,8 +1,4 @@
-import {
-  getChapter,
-  getComicDetail,
-  getReadSnapshot,
-} from "./bika-comic-detail";
+import { getChapter, getComicDetail, getReadSnapshot } from "./bika-comic-detail";
 import {
   getFavoriteData,
   getFunctionPage,
@@ -21,12 +17,7 @@ import {
   getComicListSceneBundle,
   getRankingFilterBundle,
 } from "./bika-comic-scenes";
-import {
-  getCommentFeed,
-  loadCommentReplies,
-  postComment,
-  postCommentReply,
-} from "./bika-comments";
+import { getCommentFeed, loadCommentReplies, postComment, postCommentReply } from "./bika-comments";
 import { bikaRequest, fetchImageBytes } from "./bika-request";
 import {
   clearPluginSession,
@@ -41,17 +32,11 @@ import {
   updatePassword,
   updateProfile,
 } from "./bika-settings";
-import { setUnauthorizedSchemeProvider } from "./client";
-import { buildManifestInfo } from "./info";
+import { buildManifestInfo, type BikaPluginInfo } from "./info";
 
 export { BIKA_PLUGIN_ID } from "./info";
 
-setUnauthorizedSchemeProvider(async () => {
-  const bundle = await getLoginBundle();
-  return bundle as Record<string, unknown>;
-});
-
-async function getInfo(): Promise<ReturnType<typeof buildManifestInfo>> {
+async function getInfo(): Promise<BikaPluginInfo> {
   return buildManifestInfo();
 }
 

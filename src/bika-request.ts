@@ -22,7 +22,7 @@ export async function bikaRequest(payload: BikaRequestPayload = { url: "" }) {
     }
   }
 
-  const requestConfig: any = {
+  const requestConfig: Record<string, unknown> = {
     url: resolvedPayload.url,
     method,
     __bikaPayload: resolvedPayload,
@@ -31,13 +31,10 @@ export async function bikaRequest(payload: BikaRequestPayload = { url: "" }) {
   };
 
   if (method !== "GET" && method !== "HEAD") {
-    const requestBody =
-      resolvedPayload.body == null ? {} : resolvedPayload.body;
+    const requestBody = resolvedPayload.body == null ? {} : resolvedPayload.body;
     requestConfig.data = requestBody;
     requestConfig.body =
-      typeof requestBody === "string"
-        ? requestBody
-        : JSON.stringify(requestBody);
+      typeof requestBody === "string" ? requestBody : JSON.stringify(requestBody);
   }
 
   const response = await client.request(requestConfig);

@@ -1,17 +1,19 @@
 import type {
   CapabilitiesBundleContract,
+  LoginBundleContract,
+  LoginSubmitPayload,
+  LoginSubmitResult,
   SettingsBundleContract,
+  SettingsSection,
+  StringMap,
   UserInfoBundleContract,
 } from "breeze-plugin-kit";
-import { cache, flutterTools } from "breeze-plugin-kit";
-import {
-  BIKA_HOME_CATEGORY_OPTIONS,
-  BIKA_SEARCH_CATEGORY_OPTIONS,
-} from "./bika-constants";
+import { buildLoginBundle, cache, flutterTools, readLoginValues } from "breeze-plugin-kit";
+import { BIKA_HOME_CATEGORY_OPTIONS, BIKA_SEARCH_CATEGORY_OPTIONS } from "./bika-constants";
 import { buildBikaImageUrl } from "./bika-image";
 import { bikaRequest } from "./bika-request";
 import type { BikaLoginPayload } from "./bika-types";
-import { sanitizePath, toBool, toNum, toStrList } from "./bika-utils";
+import { sanitizePath, toBool, toNum, toStrList, toStringMap } from "./bika-utils";
 import {
   API_BASE_CACHE_KEY,
   BACKUP_API_BASE,
@@ -54,6 +56,29 @@ async function readApiBaseFromCache(): Promise<string | null> {
 async function writeApiBaseToCache(apiBase: string) {
   await cache.set(API_BASE_CACHE_KEY, apiBase);
 }
+/**
+ * 旧宿主（< 3.0.34，不懂 getLoginBundle）走 settings 账号密码区登录。
+ * 三段比较：缺段按 0 补齐，Number(x)||0。
+ */
+function compareVersions(a: string, b: string): number {
+  const pa = String(a ?? "")
+    .split(".")
+    .map((x) => Number(x) || 0);
+  const pb = String(b ?? "")
+    .split(".")
+    .map((x) => Number(x) || 0);
+  const len = Math.max(pa.length, pb.length);
+  for (let i = 0; i < len; i += 1) {
+    const diff = (pa[i] ?? 0) - (pb[i] ?? 0);
+    if (diff !== 0) return diff;
+  }
+  return 0;
+}
+
+async function isLegacyHost(): Promise<boolean> {
+  const version = await flutterTools.getAppVersion();
+  return compareVersions(version, "3.0.34") < 0;
+}
 
 export async function getSettingsBundle(): Promise<SettingsBundleContract> {
   const cachedApiBase = await readApiBaseFromCache();
@@ -81,26 +106,38 @@ export async function getSettingsBundle(): Promise<SettingsBundleContract> {
     loadPluginSetting(API_BASE_SETTING_KEY, DEFAULT_API_BASE),
   ]);
 
+  const legacyHost = await isLegacyHost();
+
   return {
     source: BIKA_PLUGIN_ID,
     scheme: {
       version: "1.0.0",
       type: "settings",
       sections: [
+        ...(legacyHost
+          ? [
+              {
+                id: "account",
+                title: "账号",
+                fields: [
+                  {
+                    key: "auth.account",
+                    kind: "text",
+                    label: "账号",
+                  },
+                  {
+                    key: "auth.password",
+                    kind: "password",
+                    label: "密码",
+                  },
+                ],
+              } as SettingsSection,
+            ]
+          : []),
         {
           id: "account",
           title: "账号",
           fields: [
-            {
-              key: "auth.account",
-              kind: "text",
-              label: "账号",
-            },
-            {
-              key: "auth.password",
-              kind: "password",
-              label: "密码",
-            },
             {
               key: "account.slogan",
               kind: "text",
@@ -159,8 +196,12 @@ export async function getSettingsBundle(): Promise<SettingsBundleContract> {
     data: {
       canShowUserInfo: true,
       values: {
-        "auth.account": String(account ?? ""),
-        "auth.password": String(password ?? ""),
+        ...(legacyHost
+          ? {
+              "auth.account": String(account ?? ""),
+              "auth.password": String(password ?? ""),
+            }
+          : {}),
         "account.slogan": "",
         "account.password": "",
         "network.proxy": String(proxy ?? "3"),
@@ -170,19 +211,16 @@ export async function getSettingsBundle(): Promise<SettingsBundleContract> {
         "home.blockedCategories": toStrList(blockedHomeCategories),
         [API_BASE_SETTING_KEY]: resolveApiBaseChoice(apiBase),
       },
+      canLogin: true,
     },
   };
 }
 
-export async function saveSettings(
-  payload: { values?: Record<string, unknown> } = {},
-) {
+export async function saveSettings(payload: { values?: Record<string, unknown> } = {}) {
   const payloadMap = payload as Record<string, unknown>;
   const values = (payloadMap.values ?? {}) as Record<string, unknown>;
   const directValue = payloadMap.value ?? payloadMap[API_BASE_SETTING_KEY];
-  const selectedApiBase = resolveApiBaseChoice(
-    values[API_BASE_SETTING_KEY] ?? directValue,
-  );
+  const selectedApiBase = resolveApiBaseChoice(values[API_BASE_SETTING_KEY] ?? directValue);
 
   await Promise.all([
     savePluginSetting(API_BASE_SETTING_KEY, selectedApiBase),
@@ -205,10 +243,11 @@ export async function getUserInfoBundle(): Promise<UserInfoBundleContract> {
     method: "GET",
     cache: false,
   });
-  const user = (profile as any)?.data?.user ?? {};
-  const avatar = user?.avatar ?? {};
-  const avatarPath = String(avatar?.path ?? "").trim();
-  const avatarFileServer = String(avatar?.fileServer ?? "").trim();
+  const user = toStringMap(toStringMap(profile).data);
+  const profileUser = toStringMap(user.user);
+  const avatar = toStringMap(profileUser.avatar);
+  const avatarPath = String(avatar.path ?? "").trim();
+  const avatarFileServer = String(avatar.fileServer ?? "").trim();
   const avatarUrl =
     avatarPath && avatarFileServer
       ? await buildBikaImageUrl(avatarFileServer, avatarPath, "creator")
@@ -223,19 +262,19 @@ export async function getUserInfoBundle(): Promise<UserInfoBundleContract> {
     data: {
       title: "账号",
       avatar: {
-        id: String(user?._id ?? user?.id ?? "me"),
+        id: String(profileUser._id ?? profileUser.id ?? "me"),
         url: avatarUrl,
-        name: String(avatar?.originalName ?? ""),
+        name: String(avatar.originalName ?? ""),
         path: sanitizePath(avatarPath),
         extern: {},
       },
       lines: [
-        `${String(user?.name ?? "")} (${String(user?.slogan ?? "")})`,
-        `Lv.${toNum(user?.level, 0)} ${String(user?.title ?? "")}`,
-        `经验值: ${toNum(user?.exp, 0)} (${user?.isPunched ? "已签到" : "未签到"})`,
+        `${String(profileUser.name ?? "")} (${String(profileUser.slogan ?? "")})`,
+        `Lv.${toNum(profileUser.level, 0)} ${String(profileUser.title ?? "")}`,
+        `经验值: ${toNum(profileUser.exp, 0)} (${profileUser.isPunched ? "已签到" : "未签到"})`,
       ],
       extern: {
-        isPunched: user?.isPunched === true,
+        isPunched: profileUser.isPunched === true,
       },
     },
   };
@@ -291,33 +330,42 @@ export async function updatePassword(payload: Record<string, unknown> = {}) {
   };
 }
 
-export async function getLoginBundle() {
+export async function getLoginBundle(): Promise<LoginBundleContract> {
+  const account = String(await loadPluginSetting("auth.account", ""));
+  const password = String(await loadPluginSetting("auth.password", ""));
+  return buildLoginBundle(BIKA_PLUGIN_ID, {
+    title: "哔咔登录",
+    fields: [
+      { key: "account", kind: "text", label: "账号", required: true },
+      { key: "password", kind: "password", label: "密码", required: true },
+    ],
+    submitFnPath: "loginWithPassword",
+    submitText: "登录",
+    values: { account, password },
+  });
+}
+
+function readLoginFormValues(payload: BikaLoginPayload = {}) {
+  const record = payload as Record<string, unknown>;
+  if (record.values !== undefined) {
+    const kitValues = readLoginValues(payload as LoginSubmitPayload);
+    return {
+      account: String(kitValues.account ?? "").trim(),
+      password: String(kitValues.password ?? ""),
+    };
+  }
   return {
-    source: BIKA_PLUGIN_ID,
-    scheme: {
-      version: "1.0.0",
-      type: "login",
-      title: "哔咔登录",
-      fields: [
-        { key: "account", kind: "text", label: "账号" },
-        { key: "password", kind: "password", label: "密码" },
-      ],
-      action: {
-        fnPath: "loginWithPassword",
-        submitText: "登录",
-      },
-    },
-    data: {
-      account: String(await loadPluginSetting("auth.account", "")),
-      password: String(await loadPluginSetting("auth.password", "")),
-    },
+    account: String(record.account ?? "").trim(),
+    password: String(record.password ?? ""),
   };
 }
 
-export async function loginWithPassword(payload: BikaLoginPayload = {}) {
+export async function loginWithPassword(
+  payload: BikaLoginPayload = {},
+): Promise<LoginSubmitResult> {
   console.debug("loginWithPassword", payload);
-  const account = String(payload.account ?? "").trim();
-  const password = String(payload.password ?? "");
+  const { account, password } = readLoginFormValues(payload);
+
   if (!account || !password) {
     throw new Error("账号或密码不能为空");
   }
@@ -329,7 +377,7 @@ export async function loginWithPassword(payload: BikaLoginPayload = {}) {
     body: JSON.stringify({ email: account, password }),
   });
 
-  const token = String((result as any)?.data?.token ?? "");
+  const token = String(toStringMap(toStringMap(result).data).token ?? "");
   await Promise.all([
     savePluginSetting("auth.account", account),
     savePluginSetting("auth.password", password),
@@ -338,12 +386,12 @@ export async function loginWithPassword(payload: BikaLoginPayload = {}) {
 
   return {
     source: BIKA_PLUGIN_ID,
+    message: "登录成功",
     data: {
       account,
       password,
       token,
     },
-    raw: result,
   };
 }
 
@@ -360,9 +408,7 @@ function waitMs(ms: number) {
 async function runBikaAuthAndCheckInLoop() {
   while (true) {
     try {
-      const account = String(
-        await loadPluginSetting("auth.account", ""),
-      ).trim();
+      const account = String(await loadPluginSetting("auth.account", "")).trim();
       const password = String(await loadPluginSetting("auth.password", ""));
 
       if (!account || !password) {
@@ -372,42 +418,37 @@ async function runBikaAuthAndCheckInLoop() {
 
       await loginWithPassword({ account, password });
 
-      const apiBase = await getApiBase();
+      const checkInBase = await getApiBase();
       const data = (await bikaRequest({
-        url: `${apiBase}users/punch-in`,
+        url: `${checkInBase}users/punch-in`,
         method: "POST",
         body: JSON.stringify({}),
         cache: false,
-      })) as any;
+      })) as StringMap;
 
       console.info("[bika.init] login + checkin ok", data);
-      const status = data?.data?.res?.status;
-      if (data?.code === 200 && status && status !== "fail") {
+      const punchData = toStringMap(data.data);
+      const status = toStringMap(punchData.res).status;
+      if (data.code === 200 && status && status !== "fail") {
         try {
           flutterTools.showToast({
             message: "哔咔签到成功",
             seconds: 1,
             level: "success",
           });
-        } catch (_) {}
+        } catch {}
       }
       return;
     } catch (error) {
       const delay = randomRetryDelayMs();
-      console.warn(
-        `[bika.init] login/checkin failed, retry in ${delay}ms`,
-        error,
-      );
+      console.warn(`[bika.init] login/checkin failed, retry in ${delay}ms`, error);
       await waitMs(delay);
     }
   }
 }
 
 export async function init() {
-  const savedApiBase = await loadPluginSetting(
-    API_BASE_SETTING_KEY,
-    DEFAULT_API_BASE,
-  );
+  const savedApiBase = await loadPluginSetting(API_BASE_SETTING_KEY, DEFAULT_API_BASE);
   const selectedApiBase = resolveApiBaseChoice(savedApiBase);
   await writeApiBaseToCache(selectedApiBase);
   setApiBase(selectedApiBase);

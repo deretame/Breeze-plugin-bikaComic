@@ -1,46 +1,8 @@
 import axios, { AxiosHeaders } from "axios";
-import { cache, hostRuntime } from "breeze-plugin-kit";
+import { buildUnauthorizedError, cache, hostRuntime } from "breeze-plugin-kit";
 import { loadPluginSetting } from "./plugin-config";
 
-type UnauthorizedErrorPayload = {
-  type: "unauthorized";
-  source: string;
-  message: string;
-  scheme?: Record<string, unknown>;
-  data?: Record<string, unknown>;
-};
-
 const BIKA_PLUGIN_ID = "0a0e5858-a467-4702-994a-79e608a4589d";
-
-let unauthorizedSchemeProvider:
-  | (() => Promise<Record<string, unknown> | undefined>)
-  | null = null;
-
-export function setUnauthorizedSchemeProvider(
-  provider: () => Promise<Record<string, unknown> | undefined>,
-) {
-  unauthorizedSchemeProvider = provider;
-}
-
-async function buildUnauthorizedError(
-  message = "登录过期，请重新登录",
-): Promise<Error> {
-  const payload: UnauthorizedErrorPayload = {
-    type: "unauthorized",
-    source: BIKA_PLUGIN_ID,
-    message,
-  };
-  try {
-    const bundle = await unauthorizedSchemeProvider?.();
-    if (bundle && typeof bundle === "object") {
-      payload.scheme = (bundle.scheme as Record<string, unknown>) ?? undefined;
-      payload.data = (bundle.data as Record<string, unknown>) ?? undefined;
-    }
-  } catch (_) {
-    // ignore scheme build errors
-  }
-  return new Error(JSON.stringify(payload));
-}
 
 type ClientPayload = {
   url?: string;
@@ -56,15 +18,13 @@ type ClientPayload = {
   };
 };
 
-const tempUrl = "aabbcc.xyz";
 export const DEFAULT_API_BASE = "https://picaapi.picacomic.com/";
 export const BACKUP_API_BASE = "https://picaapi.go2778.com/";
 export const API_BASE_CACHE_KEY = "bika:network.apiBase";
 export let API_BASE = DEFAULT_API_BASE;
 export const CACHE_KEY_PREFIX = "bikaComic:requestCache:";
 const API_KEY = "C69BAF41DA5ABD1FFEDC6D2FEA56B";
-const SECRET_KEY =
-  "~d}$Q7$eIni=V)9\\RK/P.RM4;9[7|@/CA}b~OW!3?EV`:<>M7pddUBL5n|0/*Cn";
+const SECRET_KEY = "~d}$Q7$eIni=V)9\\RK/P.RM4;9[7|@/CA}b~OW!3?EV`:<>M7pddUBL5n|0/*Cn";
 const CACHE_TTL_MS = 10 * 60 * 1000;
 
 function normalizeApiBase(base: string): string {
@@ -114,14 +74,12 @@ async function writeCache(cacheKey: string, data: unknown) {
 }
 
 function isCacheEntry(v: unknown): v is CacheEntry {
-  return (
-    !!v && typeof v === "object" && typeof (v as any).expireAt === "number"
-  );
+  if (!v || typeof v !== "object" || Array.isArray(v)) return false;
+  if (!("expireAt" in v)) return false;
+  return typeof v.expireAt === "number";
 }
 
-export async function readCache(
-  cacheKey: string,
-): Promise<unknown | undefined> {
+export async function readCache(cacheKey: string): Promise<unknown | undefined> {
   const key = toCacheStorageKey(cacheKey);
 
   const entry = (await cache.get(key, undefined)) as CacheEntry | undefined;
@@ -161,10 +119,7 @@ export function buildCacheKey(payload: ClientPayload, method: string): string {
   const qualityForKey = payload.imageQuality ?? payload.settings?.imageQuality;
   const normalizedUrl = normalizeRequestUrlForKey(payload.url);
   const rawKey = `${method}|${normalizedUrl}|${normalizeForKey(payload.body)}|${String(authForKey || "")}|${String(qualityForKey || "")}`;
-  const digest = hostRuntime.crypto
-    .createHash("sha256")
-    .update(rawKey)
-    .digest("hex") as string;
+  const digest = hostRuntime.crypto.createHash("sha256").update(rawKey).digest("hex") as string;
   return `v1:${digest}`;
 }
 
@@ -198,23 +153,12 @@ function cleanPath(input: string): string {
     }
   }
 
-  return value
-    .replace(DEFAULT_API_BASE, "")
-    .replace(BACKUP_API_BASE, "")
-    .replace(/^\/+/, "");
+  return value.replace(DEFAULT_API_BASE, "").replace(BACKUP_API_BASE, "").replace(/^\/+/, "");
 }
 
-function createSignature(
-  path: string,
-  timestamp: number,
-  nonce: string,
-  method: string,
-): string {
+function createSignature(path: string, timestamp: number, nonce: string, method: string): string {
   const raw = `${path}${timestamp}${nonce}${method}${API_KEY}`.toLowerCase();
-  return hostRuntime.crypto
-    .createHmac("sha256", SECRET_KEY)
-    .update(raw)
-    .digest("hex") as string;
+  return hostRuntime.crypto.createHmac("sha256", SECRET_KEY).update(raw).digest("hex") as string;
 }
 
 function mapNetworkError(err: unknown): string {
@@ -250,8 +194,8 @@ const bikaClient = axios.create({
 });
 
 bikaClient.interceptors.request.use(async (config) => {
-  const payload = ((config as unknown as { __bikaPayload?: ClientPayload })
-    .__bikaPayload ?? {}) as Partial<ClientPayload>;
+  const payload = ((config as unknown as { __bikaPayload?: ClientPayload }).__bikaPayload ??
+    {}) as Partial<ClientPayload>;
   const method = toUpperMethod(config.method);
   const requestUrl = String(config.url || "");
   const nonce = randomHex(32);
@@ -259,9 +203,7 @@ bikaClient.interceptors.request.use(async (config) => {
   const path = cleanPath(requestUrl);
 
   const imageQuality = "original";
-  const authorization = String(
-    await loadPluginSetting("auth.authorization", ""),
-  ).trim();
+  const authorization = String(await loadPluginSetting("auth.authorization", "")).trim();
   const appChannel = String(payload.settings?.proxy || "3");
   const headers = AxiosHeaders.from(config.headers);
 
@@ -312,18 +254,15 @@ bikaClient.interceptors.response.use(
     const data = e?.response?.data;
     if (
       e?.response?.status === 401 ||
-      (data?.code === 401 &&
-        data?.error === "1005" &&
-        data?.message === "unauthorized")
+      (data?.code === 401 && data?.error === "1005" && data?.message === "unauthorized")
     ) {
-      throw await buildUnauthorizedError("登录过期，请重新登录");
+      throw buildUnauthorizedError(BIKA_PLUGIN_ID, "登录过期，请重新登录");
     }
 
     const mapped = mapNetworkError(error);
 
     if (error && typeof error === "object") {
-      (error as { message?: string }).message =
-        mapped || (error as { message?: string }).message;
+      (error as { message?: string }).message = mapped || (error as { message?: string }).message;
       throw error;
     }
 
