@@ -61,10 +61,12 @@ async function writeApiBaseToCache(apiBase: string) {
  * 三段比较：缺段按 0 补齐，Number(x)||0。
  */
 function compareVersions(a: string, b: string): number {
-  const pa = String(a ?? "")
+  // dart.getAppVersion 返回 JSON 编码串（首尾带引号），先剥掉。
+  const clean = (v: string) => String(v ?? "").trim().replace(/^"+|"+$/g, "");
+  const pa = clean(a)
     .split(".")
     .map((x) => Number(x) || 0);
-  const pb = String(b ?? "")
+  const pb = clean(b)
     .split(".")
     .map((x) => Number(x) || 0);
   const len = Math.max(pa.length, pb.length);
