@@ -416,8 +416,10 @@ async function runAutoCheckInUntilSuccess(): Promise<void> {
           cache: false,
         })) as StringMap;
         const punchData = toStringMap(data.data);
-        const status = toStringMap(punchData.res).status;
-        if (data.code === 200 && status && status !== "fail") {
+        const status = String(toStringMap(punchData.res).status ?? "");
+        // code=200 即完成：刚签上或今天已签过（fail=重复签到）都算成功。
+        // 只有非 200（限流/掉线）才抛错重试。
+        if (data.code === 200) {
           console.info("[bika.init] background checkin done", data);
           try {
             flutterTools.showToast({
@@ -428,7 +430,7 @@ async function runAutoCheckInUntilSuccess(): Promise<void> {
           } catch {}
           return;
         }
-        throw new Error(`签到未成功: code=${String(data.code)} status=${String(status)}`);
+        throw new Error(`签到未成功: code=${String(data.code)} status=${status}`);
       } catch (error) {
         console.warn(
           `[bika.init] background checkin failed, retry in ${AUTO_CHECKIN_RETRY_DELAY_MS}ms`,

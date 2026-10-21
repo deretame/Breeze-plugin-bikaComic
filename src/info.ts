@@ -60,7 +60,7 @@ export function buildManifestInfo(): BikaPluginInfo {
     iconUrl:
       "https://raw.githubusercontent.com/deretame/Breeze-plugin-bikaComic/main/assets/logo_round.webp",
     describe: "哔咔漫画插件",
-    version: "0.1.0",
+    version: "0.1.1",
     updateUrl: "https://api.github.com/repos/deretame/Breeze-plugin-bikaComic/releases/latest",
     home: "https://github.com/deretame/Breeze-plugin-bikaComic",
     npmName: "breeze-plugin-bika-comic",
