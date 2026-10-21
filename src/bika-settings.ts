@@ -397,56 +397,85 @@ export async function loginWithPassword(
   };
 }
 
-function randomRetryDelayMs() {
-  const min = 20_000;
-  const max = 300_000;
-  return Math.floor(min + Math.random() * (max - min));
-}
+const AUTO_CHECKIN_RETRY_DELAY_MS = 60_000;
+let autoCheckInPromise: Promise<void> | null = null;
 
-function waitMs(ms: number) {
-  return new Promise<void>((resolve) => setTimeout(resolve, ms));
-}
+async function runAutoCheckInUntilSuccess(): Promise<void> {
+  if (autoCheckInPromise) {
+    return autoCheckInPromise;
+  }
 
-async function runBikaAuthAndCheckInLoop() {
-  while (true) {
-    try {
-      const account = String(await loadPluginSetting("auth.account", "")).trim();
-      const password = String(await loadPluginSetting("auth.password", ""));
-
-      if (!account || !password) {
-        console.info("[bika.init] skip auth/checkin: no credentials");
-        return;
+  const task = (async () => {
+    while (true) {
+      try {
+        const checkInBase = await getApiBase();
+        const data = (await bikaRequest({
+          url: `${checkInBase}users/punch-in`,
+          method: "POST",
+          body: JSON.stringify({}),
+          cache: false,
+        })) as StringMap;
+        const punchData = toStringMap(data.data);
+        const status = toStringMap(punchData.res).status;
+        if (data.code === 200 && status && status !== "fail") {
+          console.info("[bika.init] background checkin done", data);
+          try {
+            flutterTools.showToast({
+              message: "哔咔签到成功",
+              seconds: 1,
+              level: "success",
+            });
+          } catch {}
+          return;
+        }
+        throw new Error(`签到未成功: code=${String(data.code)} status=${String(status)}`);
+      } catch (error) {
+        console.warn(
+          `[bika.init] background checkin failed, retry in ${AUTO_CHECKIN_RETRY_DELAY_MS}ms`,
+          error,
+        );
+        await new Promise<void>((resolve) => {
+          setTimeout(resolve, AUTO_CHECKIN_RETRY_DELAY_MS);
+        });
       }
+    }
+  })();
 
-      await loginWithPassword({ account, password });
-
-      const checkInBase = await getApiBase();
-      const data = (await bikaRequest({
-        url: `${checkInBase}users/punch-in`,
-        method: "POST",
-        body: JSON.stringify({}),
-        cache: false,
-      })) as StringMap;
-
-      console.info("[bika.init] login + checkin ok", data);
-      const punchData = toStringMap(data.data);
-      const status = toStringMap(punchData.res).status;
-      if (data.code === 200 && status && status !== "fail") {
-        try {
-          flutterTools.showToast({
-            message: "哔咔签到成功",
-            seconds: 1,
-            level: "success",
-          });
-        } catch {}
-      }
-      return;
-    } catch (error) {
-      const delay = randomRetryDelayMs();
-      console.warn(`[bika.init] login/checkin failed, retry in ${delay}ms`, error);
-      await waitMs(delay);
+  autoCheckInPromise = task;
+  try {
+    await task;
+  } finally {
+    if (autoCheckInPromise === task) {
+      autoCheckInPromise = null;
     }
   }
+}
+
+async function loginForInit(): Promise<void> {
+  const account = String(await loadPluginSetting("auth.account", "")).trim();
+  const password = String(await loadPluginSetting("auth.password", ""));
+  if (!account || !password) {
+    console.info("[bika.init] skip login: no credentials");
+    return;
+  }
+  let lastError: unknown = null;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      await loginWithPassword({ account, password });
+      console.info(`[bika.init] login ok (attempt ${attempt})`);
+      // 签到不阻塞 init，后台无限重试直到成功。
+      void runAutoCheckInUntilSuccess().catch((error) => {
+        console.warn("[bika.init] background checkin stopped", error);
+      });
+      return;
+    } catch (error) {
+      lastError = error;
+      console.warn(`[bika.init] login failed (attempt ${attempt}/3)`, error);
+    }
+  }
+  throw lastError instanceof Error
+    ? lastError
+    : new Error(`登录失败，已重试 3 次: ${String(lastError)}`);
 }
 
 export async function init() {
@@ -455,7 +484,8 @@ export async function init() {
   await writeApiBaseToCache(selectedApiBase);
   setApiBase(selectedApiBase);
   console.info(`[bika.init] api base selected: ${selectedApiBase}`);
-  runBikaAuthAndCheckInLoop();
+  // 走完登录（最多 3 次）才算 init 成功；无账号直接返回成功。
+  await loginForInit();
 
   return {
     source: BIKA_PLUGIN_ID,

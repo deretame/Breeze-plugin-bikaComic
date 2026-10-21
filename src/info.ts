@@ -60,10 +60,12 @@ export function buildManifestInfo(): BikaPluginInfo {
     iconUrl:
       "https://raw.githubusercontent.com/deretame/Breeze-plugin-bikaComic/main/assets/logo_round.webp",
     describe: "哔咔漫画插件",
-    version: "0.0.11",
+    version: "0.1.0",
     updateUrl: "https://api.github.com/repos/deretame/Breeze-plugin-bikaComic/releases/latest",
     home: "https://github.com/deretame/Breeze-plugin-bikaComic",
     npmName: "breeze-plugin-bika-comic",
+    haveHome: true,
+    haveCloudFavorite: true,
     function: [
       {
         id: "hotSearch",
@@ -103,9 +105,9 @@ export function buildManifestInfo(): BikaPluginInfo {
         id: "cloudFavorite",
         title: "云端收藏",
         action: {
-          type: "openCloudFavorite",
+          type: "openComicList",
           payload: {
-            title: "云端收藏",
+            scene: buildCloudFavoriteScene(),
           },
         },
       },
