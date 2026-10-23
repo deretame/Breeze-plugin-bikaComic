@@ -62,7 +62,10 @@ async function writeApiBaseToCache(apiBase: string) {
  */
 function compareVersions(a: string, b: string): number {
   // dart.getAppVersion 返回 JSON 编码串（首尾带引号），先剥掉。
-  const clean = (v: string) => String(v ?? "").trim().replace(/^"+|"+$/g, "");
+  const clean = (v: string) =>
+    String(v ?? "")
+      .trim()
+      .replace(/^"+|"+$/g, "");
   const pa = clean(a)
     .split(".")
     .map((x) => Number(x) || 0);
@@ -417,17 +420,24 @@ async function runAutoCheckInUntilSuccess(): Promise<void> {
         })) as StringMap;
         const punchData = toStringMap(data.data);
         const status = String(toStringMap(punchData.res).status ?? "");
-        // code=200 即完成：刚签上或今天已签过（fail=重复签到）都算成功。
-        // 只有非 200（限流/掉线）才抛错重试。
-        if (data.code === 200) {
-          console.info("[bika.init] background checkin done", data);
-          try {
-            flutterTools.showToast({
-              message: "哔咔签到成功",
-              seconds: 1,
-              level: "success",
-            });
-          } catch {}
+        // code=200 即完成：status=ok 是本次刚签上才弹提示；
+        // status=fail=今日已签过，静默完成、不重试；未知 status 也静默完成，避免误弹。
+        // 非 200（限流/掉线）才抛错重试。
+        if (Number(data.code) === 200) {
+          if (status === "ok") {
+            console.info("[bika.init] background checkin done", data);
+            try {
+              flutterTools.showToast({
+                message: "哔咔签到成功",
+                seconds: 1,
+                level: "success",
+              });
+            } catch {}
+          } else if (status === "fail") {
+            console.info("[bika.init] already punched today, skip toast", data);
+          } else {
+            console.info("[bika.init] checkin done with unknown status, skip toast", data);
+          }
           return;
         }
         throw new Error(`签到未成功: code=${String(data.code)} status=${status}`);

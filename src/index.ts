@@ -17,10 +17,7 @@ import {
   getComicListSceneBundle,
   getRankingFilterBundle,
 } from "./bika-comic-scenes";
-import {
-  getPluginCloudFavoritePagesBundle,
-  getPluginHomePagesBundle,
-} from "./bika-home-bundle";
+import { getPluginCloudFavoritePagesBundle, getPluginHomePagesBundle } from "./bika-home-bundle";
 import { getCommentFeed, loadCommentReplies, postComment, postCommentReply } from "./bika-comments";
 import { bikaRequest, fetchImageBytes } from "./bika-request";
 import {

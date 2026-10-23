@@ -14,9 +14,7 @@ import { getFunctionPage } from "./bika-comic-library";
  * header.actions 只引用 getInfo functions 已定义功能。
  */
 
-function externOf(
-  payload: GetPluginHomePagesBundlePayload = {},
-): Record<string, unknown> {
+function externOf(payload: GetPluginHomePagesBundlePayload = {}): Record<string, unknown> {
   return {
     ...payload.extern,
     source: BIKA_PLUGIN_ID,
