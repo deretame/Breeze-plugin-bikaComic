@@ -8,7 +8,15 @@ import type {
   StringMap,
   UserInfoBundleContract,
 } from "breeze-plugin-kit";
-import { buildLoginBundle, cache, flutterTools, readLoginValues } from "breeze-plugin-kit";
+import {
+  buildLoginBundle,
+  cache,
+  flutterTools,
+  getEchHosts,
+  readLoginValues,
+  setEchHosts,
+} from "breeze-plugin-kit";
+import axios from "axios";
 import { BIKA_HOME_CATEGORY_OPTIONS, BIKA_SEARCH_CATEGORY_OPTIONS } from "./bika-constants";
 import { buildBikaImageUrl } from "./bika-image";
 import { bikaRequest } from "./bika-request";
@@ -18,19 +26,22 @@ import {
   API_BASE_CACHE_KEY,
   BACKUP_API_BASE,
   DEFAULT_API_BASE,
+  ECH_API_BASE,
+  ECH_API_HOSTS,
+  PART26_API_BASES,
+  SPARE_API_BASE,
   getApiBase,
   setApiBase,
 } from "./client";
 import { BIKA_PLUGIN_ID } from "./info";
 import { loadPluginSetting, savePluginSetting } from "./plugin-config";
 
-export { loadPluginSetting } from "./plugin-config";
-
 const API_BASE_SETTING_KEY = "network.apiBase";
-const API_BASE_OPTIONS: Array<{ label: string; value: string }> = [
-  { label: "主线路", value: DEFAULT_API_BASE },
-  { label: "备用线路", value: BACKUP_API_BASE },
-];
+/**
+ * ECH 要求的最低宿主版本：必须严格高于该版本。
+ * 与前置能力同批上线（3.0.38+），更低版本上整个功能不启用。
+ */
+const ECH_MIN_APP_VERSION = "3.0.37";
 
 function normalizeApiBase(base: unknown): string {
   const value = String(base ?? "").trim();
@@ -38,23 +49,26 @@ function normalizeApiBase(base: unknown): string {
   return value.endsWith("/") ? value : `${value}/`;
 }
 
-function resolveApiBaseChoice(raw: unknown): string {
-  const normalized = normalizeApiBase(raw);
-  const supported = new Set(API_BASE_OPTIONS.map((item) => item.value));
-  return supported.has(normalized) ? normalized : DEFAULT_API_BASE;
-}
-
-async function readApiBaseFromCache(): Promise<string | null> {
-  const cached = await cache.get(API_BASE_CACHE_KEY, "");
-  const candidate = resolveApiBaseChoice(cached);
-  if (!String(cached ?? "").trim()) {
-    return null;
+/** 宿主 Dart 端会 jsonDecode 持久化值，node polyfill 不会——两侧都容忍引号。 */
+function decodePersistedValue(raw: unknown): string {
+  const text = String(raw ?? "").trim();
+  if (!text) return "";
+  try {
+    const decoded: unknown = JSON.parse(text);
+    if (typeof decoded === "string") return decoded.trim();
+  } catch {
+    // 非 JSON 字符串，原样返回
   }
-  return candidate;
+  return text;
 }
 
-async function writeApiBaseToCache(apiBase: string) {
-  await cache.set(API_BASE_CACHE_KEY, apiBase);
+/** 回退链：测试成功前/测试失败时，缓存 → 持久化 → 官方直连，先凑合用。 */
+async function resolveStopgapApiBase(): Promise<string> {
+  const cached = decodePersistedValue(await cache.get(API_BASE_CACHE_KEY, ""));
+  if (cached) return normalizeApiBase(cached);
+  const persisted = decodePersistedValue(await loadPluginSetting(API_BASE_SETTING_KEY, ""));
+  if (persisted) return normalizeApiBase(persisted);
+  return DEFAULT_API_BASE;
 }
 /**
  * 旧宿主（< 3.0.34，不懂 getLoginBundle）走 settings 账号密码区登录。
@@ -85,12 +99,27 @@ async function isLegacyHost(): Promise<boolean> {
   return compareVersions(version, "3.0.34") < 0;
 }
 
-export async function getSettingsBundle(): Promise<SettingsBundleContract> {
-  const cachedApiBase = await readApiBaseFromCache();
-  if (cachedApiBase) {
-    setApiBase(cachedApiBase);
+/**
+ * 宿主版本是否支持 ECH（严格高于 3.0.37）。
+ *
+ * 纯 Node 环境（dev-server）没有 bridge，读不到版本，按「不支持」处理，
+ * 不能让 init 直接抛错。
+ */
+async function supportsEchHost(): Promise<boolean> {
+  try {
+    const version = await flutterTools.getAppVersion();
+    const supported = compareVersions(version, ECH_MIN_APP_VERSION) > 0;
+    console.info(
+      `[bika.ech] host version ${version || "unknown"} ${supported ? ">" : "<="} ${ECH_MIN_APP_VERSION} -> ${supported ? "enabled" : "disabled"}`,
+    );
+    return supported;
+  } catch (error) {
+    console.warn(`[bika.ech] getAppVersion failed: ${String((error as Error)?.message ?? error)}`);
+    return false;
   }
+}
 
+export async function getSettingsBundle(): Promise<SettingsBundleContract> {
   const [
     account,
     password,
@@ -99,7 +128,6 @@ export async function getSettingsBundle(): Promise<SettingsBundleContract> {
     slowDownload,
     blockedCategories,
     blockedHomeCategories,
-    apiBase,
   ] = await Promise.all([
     loadPluginSetting("auth.account", ""),
     loadPluginSetting("auth.password", ""),
@@ -108,7 +136,6 @@ export async function getSettingsBundle(): Promise<SettingsBundleContract> {
     loadPluginSetting("download.slow", false),
     loadPluginSetting("search.blockedCategories", []),
     loadPluginSetting("home.blockedCategories", []),
-    loadPluginSetting(API_BASE_SETTING_KEY, DEFAULT_API_BASE),
   ]);
 
   const legacyHost = await isLegacyHost();
@@ -183,19 +210,6 @@ export async function getSettingsBundle(): Promise<SettingsBundleContract> {
             },
           ],
         },
-        {
-          id: "network",
-          title: "网络设置",
-          fields: [
-            {
-              key: API_BASE_SETTING_KEY,
-              kind: "select",
-              label: "接口线路",
-              fnPath: "saveSettings",
-              options: API_BASE_OPTIONS,
-            },
-          ],
-        },
       ],
     },
     data: {
@@ -214,29 +228,8 @@ export async function getSettingsBundle(): Promise<SettingsBundleContract> {
         "download.slow": toBool(slowDownload, false),
         "search.blockedCategories": toStrList(blockedCategories),
         "home.blockedCategories": toStrList(blockedHomeCategories),
-        [API_BASE_SETTING_KEY]: resolveApiBaseChoice(apiBase),
       },
       canLogin: true,
-    },
-  };
-}
-
-export async function saveSettings(payload: { values?: Record<string, unknown> } = {}) {
-  const payloadMap = payload as Record<string, unknown>;
-  const values = (payloadMap.values ?? {}) as Record<string, unknown>;
-  const directValue = payloadMap.value ?? payloadMap[API_BASE_SETTING_KEY];
-  const selectedApiBase = resolveApiBaseChoice(values[API_BASE_SETTING_KEY] ?? directValue);
-
-  await Promise.all([
-    savePluginSetting(API_BASE_SETTING_KEY, selectedApiBase),
-    writeApiBaseToCache(selectedApiBase),
-  ]);
-  setApiBase(selectedApiBase);
-
-  return {
-    ok: true,
-    data: {
-      apiBase: selectedApiBase,
     },
   };
 }
@@ -490,21 +483,149 @@ async function loginForInit(): Promise<void> {
     : new Error(`登录失败，已重试 3 次: ${String(lastError)}`);
 }
 
+const PROBE_TIMEOUT_MS = 5_000;
+
+/**
+ * 真 API 对未签名请求返回 400 + `{code, error, message}` 的 JSON 信封；
+ * 用它区分「真线路」和「占位/被劫持的同码 400」（后者不是 JSON 信封）。
+ */
+function isBikaApiPayload(data: unknown): boolean {
+  if (!data || typeof data !== "object") return false;
+  const payload = data as { code?: unknown; message?: unknown };
+  return typeof payload.code === "number" && typeof payload.message === "string";
+}
+
+/**
+ * 只有拿到真 API 的 JSON 信封才算可达；超时 / 网络错误 / 其它站点一律 null。
+ *
+ * ECH 的 TLS 抖动（`InvalidContentType`）是偶发的，失败重试一次再判定。
+ */
+async function probeApiBaseLatency(apiBase: string): Promise<number | null> {
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    const started = Date.now();
+    try {
+      const response = await axios.get(apiBase, {
+        timeout: PROBE_TIMEOUT_MS,
+        adapter: "fetch",
+        validateStatus: () => true,
+      });
+      if (!isBikaApiPayload(response.data)) {
+        console.warn(`[bika.probe] reject ${apiBase} (not bika api)`);
+        return null;
+      }
+      const elapsed = Date.now() - started;
+      console.info(`[bika.probe] ok ${apiBase} ${elapsed}ms${attempt > 1 ? " (retry)" : ""}`);
+      return elapsed;
+    } catch (error) {
+      const message = String((error as Error)?.message ?? error);
+      if (attempt === 1) {
+        console.warn(`[bika.probe] retry ${apiBase}: ${message}`);
+        await new Promise((resolve) => setTimeout(resolve, 200));
+        continue;
+      }
+      console.warn(`[bika.probe] fail ${apiBase}: ${message}`);
+      return null;
+    }
+  }
+  return null;
+}
+
+async function pickFastestApiBase(candidates: readonly string[]): Promise<string | null> {
+  const latencies = await Promise.all(candidates.map((base) => probeApiBaseLatency(base)));
+  let winner: string | null = null;
+  let bestMs = Number.POSITIVE_INFINITY;
+  candidates.forEach((base, index) => {
+    const ms = latencies[index];
+    if (ms !== null && ms < bestMs) {
+      bestMs = ms;
+      winner = base;
+    }
+  });
+  return winner;
+}
+
+/**
+ * 每次 init 先测延迟，返回延迟最低的可达线路；全部失败返回 null（保持回退值）。
+ *
+ * 主候选 = 官方 + go2778 + part26 五条分流（实测都能返回真 API 信封）。
+ * sl2608p / cloudflare-ech 当前 DNS 解析不到，单独放一层，避免每次 init 白等 5 秒。
+ */
+async function selectApiBaseByLatency(): Promise<string | null> {
+  const primary = [DEFAULT_API_BASE, BACKUP_API_BASE, ...PART26_API_BASES];
+  const winner = await pickFastestApiBase(primary);
+  if (winner) {
+    console.info(`[bika.probe] winner ${winner}`);
+    return winner;
+  }
+  console.warn("[bika.probe] all primary lines failed, trying spare lines");
+  const spare = await pickFastestApiBase([SPARE_API_BASE, ECH_API_BASE]);
+  console.info(`[bika.probe] spare winner ${spare ?? "none"}`);
+  return spare;
+}
+
+/**
+ * 把支持 ECH 的线路登记给宿主（URL 保持域名、SNI 加密，绕开 SNI 阻断）。
+ *
+ * 调用方先确认宿主版本 > 3.0.37；`setEchHosts` 内部优先用宿主的 `fronting`
+ * 对象、旧宿主回退内部函数，两者都没有时返回 `{ ok: false }`，请求回退普通 TLS。
+ * ECHConfig / IP 由宿主用 DoH 的 HTTPS RR 补齐，插件只负责说「这些域名要走 ECH」。
+ */
+function registerEchHosts(): boolean {
+  const table = Object.fromEntries(ECH_API_HOSTS.map((host) => [host, {}]));
+  const result = setEchHosts(table);
+  console.info(`[bika.ech] setEchHosts -> ${JSON.stringify(result)}`);
+  if (result.ok) {
+    // 读回宿主当前表：ips 为空表示还没拉过 DoH，ech=false 表示宿主还没拿到 ECHConfig。
+    const current = getEchHosts();
+    console.info(`[bika.ech] host table -> ${JSON.stringify(current)}`);
+  }
+  return result.ok === true;
+}
+
 export async function init() {
-  const savedApiBase = await loadPluginSetting(API_BASE_SETTING_KEY, DEFAULT_API_BASE);
-  const selectedApiBase = resolveApiBaseChoice(savedApiBase);
-  await writeApiBaseToCache(selectedApiBase);
-  setApiBase(selectedApiBase);
-  console.info(`[bika.init] api base selected: ${selectedApiBase}`);
-  // 走完登录（最多 3 次）才算 init 成功；无账号直接返回成功。
-  await loginForInit();
+  // ECH：宿主版本 > 3.0.37 且具备能力时才登记；先登记，后面的测速 / 登录请求
+  // 才会走「加密 SNI + DoH 钉 IP」。
+  const echVersionOk = await supportsEchHost();
+  const echEnabled = echVersionOk && registerEchHosts();
+  console.info(
+    `[bika.init] ech hosts ${echEnabled ? "registered" : echVersionOk ? "unsupported" : "version-too-old"}`,
+  );
+
+  // 回退：测试成功前/测试失败时，缓存 → 持久化 → 官方直连，先凑合用。
+  const stopgapApiBase = await resolveStopgapApiBase();
+  setApiBase(stopgapApiBase);
+  console.info(`[bika.init] stopgap api base: ${stopgapApiBase}`);
+
+  // 先测延迟，用延迟最低的线路登录。
+  const winner = await selectApiBaseByLatency();
+  const selectedApiBase = winner ?? stopgapApiBase;
+  if (!winner) {
+    console.warn(`[bika.init] latency probe failed on all lines, keep stopgap: ${stopgapApiBase}`);
+  } else if (winner !== stopgapApiBase) {
+    setApiBase(winner);
+    console.info(`[bika.init] api base selected: ${winner}`);
+  } else {
+    console.info(`[bika.init] probe confirmed stopgap line: ${winner}`);
+  }
+
+  try {
+    // 走完登录（最多 3 次）才算 init 成功；无账号直接返回成功。
+    await loginForInit();
+  } finally {
+    // init 结束后把生效线路写进持久化 + 缓存。
+    await Promise.all([
+      savePluginSetting(API_BASE_SETTING_KEY, selectedApiBase),
+      cache.set(API_BASE_CACHE_KEY, selectedApiBase),
+    ]);
+    console.info(`[bika.init] api base persisted: ${selectedApiBase}`);
+  }
 
   return {
     source: BIKA_PLUGIN_ID,
     data: {
       ok: true,
       started: true,
-      apiBase: await getApiBase(),
+      apiBase: selectedApiBase,
     },
   };
 }

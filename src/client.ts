@@ -20,6 +20,35 @@ type ClientPayload = {
 
 export const DEFAULT_API_BASE = "https://picaapi.picacomic.com/";
 export const BACKUP_API_BASE = "https://picaapi.go2778.com/";
+// 以下来自 picacg v2.6.74 拆包：
+// - part26.* 是 domain/model/RouteTarget.java 里的分流 2~6，API 基址统一拼成
+//   https://picaapi.<domain>/（defpackage/g04.java:262）；
+// - sl2608p.top / cloudflare-ech.com 来自 defpackage/k92.java 的智能优选候选池，
+//   实测当前 DNS 已解析不到，只在主线路全挂时兜底。
+export const PART26_API_BASES = [
+  "https://picaapi.part26.art/",
+  "https://picaapi.part26.click/",
+  "https://picaapi.part26.help/",
+  "https://picaapi.part26.sbs/",
+  "https://picaapi.part26.top/",
+] as const;
+export const SPARE_API_BASE = "https://picaapi.sl2608p.top/";
+export const ECH_API_BASE = "https://picaapi.cloudflare-ech.com/";
+/**
+ * 支持 ECH 的线路域（DoH 的 HTTPS RR 里带 `ech=` 参数）。
+ *
+ * 这些线路必须看 SNI，无 SNI 前置会被 Cloudflare 拒绝；交给宿主走 ECH：
+ * URL 保持域名、SNI 加密（外层是 ECHConfig 的 public_name），IP 用 DoH 的
+ * `ipv4hint` 钉死，绕开 DNS 污染。
+ */
+export const ECH_API_HOSTS = [
+  "picaapi.go2778.com",
+  "picaapi.part26.art",
+  "picaapi.part26.click",
+  "picaapi.part26.help",
+  "picaapi.part26.sbs",
+  "picaapi.part26.top",
+] as const;
 export const API_BASE_CACHE_KEY = "bika:network.apiBase";
 export let API_BASE = DEFAULT_API_BASE;
 export const CACHE_KEY_PREFIX = "bikaComic:requestCache:";
@@ -40,14 +69,9 @@ export function setApiBase(base: string) {
 }
 
 export async function getApiBase() {
-  const raw = await cache.get(API_BASE_CACHE_KEY, DEFAULT_API_BASE);
-  const normalized = normalizeApiBase(String(raw ?? ""));
-  const next = normalized || DEFAULT_API_BASE;
-  if (API_BASE !== next) {
-    API_BASE = next;
-    bikaClient.defaults.baseURL = API_BASE;
-  }
-  return next;
+  // 生效基址以模块状态为准（init 已写入）；不再回读宿主缓存，
+  // 避免缓存 TTL 过期后静默退回默认线路。
+  return API_BASE;
 }
 
 type CacheEntry = {
