@@ -26,10 +26,9 @@ import {
   API_BASE_CACHE_KEY,
   BACKUP_API_BASE,
   DEFAULT_API_BASE,
-  ECH_API_BASE,
   ECH_API_HOSTS,
   PART26_API_BASES,
-  SPARE_API_BASE,
+  PINNED_HOSTS,
   getApiBase,
   setApiBase,
 } from "./client";
@@ -41,7 +40,7 @@ const API_BASE_SETTING_KEY = "network.apiBase";
  * ECH 要求的最低宿主版本：必须严格高于该版本。
  * 与前置能力同批上线（3.0.38+），更低版本上整个功能不启用。
  */
-const ECH_MIN_APP_VERSION = "3.0.37";
+const NETWORK_HOST_MIN_APP_VERSION = "3.0.37";
 
 function normalizeApiBase(base: unknown): string {
   const value = String(base ?? "").trim();
@@ -62,13 +61,14 @@ function decodePersistedValue(raw: unknown): string {
   return text;
 }
 
-/** 回退链：测试成功前/测试失败时，缓存 → 持久化 → 官方直连，先凑合用。 */
+/** 回退链：测试成功前/测试失败时，缓存 → 持久化 → 备用线路（go2778），先凑合用。 */
 async function resolveStopgapApiBase(): Promise<string> {
   const cached = decodePersistedValue(await cache.get(API_BASE_CACHE_KEY, ""));
   if (cached) return normalizeApiBase(cached);
   const persisted = decodePersistedValue(await loadPluginSetting(API_BASE_SETTING_KEY, ""));
   if (persisted) return normalizeApiBase(persisted);
-  return DEFAULT_API_BASE;
+  // 官方域（picacomic.com）在墙内被 SNI 阻断，不能当兜底；go2778 是官方分流 1。
+  return BACKUP_API_BASE;
 }
 /**
  * 旧宿主（< 3.0.34，不懂 getLoginBundle）走 settings 账号密码区登录。
@@ -100,21 +100,22 @@ async function isLegacyHost(): Promise<boolean> {
 }
 
 /**
- * 宿主版本是否支持 ECH（严格高于 3.0.37）。
+ * 宿主版本是否支持「ECH + 钉 IP」（严格高于 3.0.37）。
  *
+ * 两者用的是同一套宿主 API（`fronting.setEchHosts`），所以共用一个版本门控。
  * 纯 Node 环境（dev-server）没有 bridge，读不到版本，按「不支持」处理，
  * 不能让 init 直接抛错。
  */
-async function supportsEchHost(): Promise<boolean> {
+async function supportsNetworkHost(): Promise<boolean> {
   try {
     const version = await flutterTools.getAppVersion();
-    const supported = compareVersions(version, ECH_MIN_APP_VERSION) > 0;
+    const supported = compareVersions(version, NETWORK_HOST_MIN_APP_VERSION) > 0;
     console.info(
-      `[bika.ech] host version ${version || "unknown"} ${supported ? ">" : "<="} ${ECH_MIN_APP_VERSION} -> ${supported ? "enabled" : "disabled"}`,
+      `[bika.net] host version ${version || "unknown"} ${supported ? ">" : "<="} ${NETWORK_HOST_MIN_APP_VERSION} -> ${supported ? "enabled" : "disabled"}`,
     );
     return supported;
   } catch (error) {
-    console.warn(`[bika.ech] getAppVersion failed: ${String((error as Error)?.message ?? error)}`);
+    console.warn(`[bika.net] getAppVersion failed: ${String((error as Error)?.message ?? error)}`);
     return false;
   }
 }
@@ -496,71 +497,82 @@ function isBikaApiPayload(data: unknown): boolean {
 }
 
 /**
- * 只有拿到真 API 的 JSON 信封才算可达；超时 / 网络错误 / 其它站点一律 null。
+ * 单次探测：只有拿到真 API 的 JSON 信封才算可达；超时 / 网络错误 / 其它站点一律 null。
  *
- * ECH 的 TLS 抖动（`InvalidContentType`）是偶发的，失败重试一次再判定。
+ * 不重试：现在是并发抢答（`pickFastestApiBase`），失败的那条直接输掉，
+ * 重试只会把 init 拖长（死线路 5s × 2）。
  */
-async function probeApiBaseLatency(apiBase: string): Promise<number | null> {
-  for (let attempt = 1; attempt <= 2; attempt += 1) {
-    const started = Date.now();
-    try {
-      const response = await axios.get(apiBase, {
-        timeout: PROBE_TIMEOUT_MS,
-        adapter: "fetch",
-        validateStatus: () => true,
-      });
-      if (!isBikaApiPayload(response.data)) {
-        console.warn(`[bika.probe] reject ${apiBase} (not bika api)`);
-        return null;
-      }
-      const elapsed = Date.now() - started;
-      console.info(`[bika.probe] ok ${apiBase} ${elapsed}ms${attempt > 1 ? " (retry)" : ""}`);
-      return elapsed;
-    } catch (error) {
-      const message = String((error as Error)?.message ?? error);
-      if (attempt === 1) {
-        console.warn(`[bika.probe] retry ${apiBase}: ${message}`);
-        await new Promise((resolve) => setTimeout(resolve, 200));
-        continue;
-      }
-      console.warn(`[bika.probe] fail ${apiBase}: ${message}`);
+async function probeApiBaseLatency(apiBase: string, signal: AbortSignal): Promise<number | null> {
+  const started = Date.now();
+  try {
+    const response = await axios.get(apiBase, {
+      timeout: PROBE_TIMEOUT_MS,
+      adapter: "fetch",
+      validateStatus: () => true,
+      signal,
+    });
+    if (!isBikaApiPayload(response.data)) {
+      console.warn(`[bika.probe] reject ${apiBase} (not bika api)`);
       return null;
     }
+    const elapsed = Date.now() - started;
+    console.info(`[bika.probe] ok ${apiBase} ${elapsed}ms`);
+    return elapsed;
+  } catch (error) {
+    if (signal.aborted) return null;
+    console.warn(`[bika.probe] fail ${apiBase}: ${String((error as Error)?.message ?? error)}`);
+    return null;
   }
-  return null;
-}
-
-async function pickFastestApiBase(candidates: readonly string[]): Promise<string | null> {
-  const latencies = await Promise.all(candidates.map((base) => probeApiBaseLatency(base)));
-  let winner: string | null = null;
-  let bestMs = Number.POSITIVE_INFINITY;
-  candidates.forEach((base, index) => {
-    const ms = latencies[index];
-    if (ms !== null && ms < bestMs) {
-      bestMs = ms;
-      winner = base;
-    }
-  });
-  return winner;
 }
 
 /**
- * 每次 init 先测延迟，返回延迟最低的可达线路；全部失败返回 null（保持回退值）。
+ * 并发探测，谁先拿到真 API 信封用谁，其余立刻 abort。
  *
- * 主候选 = 官方 + go2778 + part26 五条分流（实测都能返回真 API 信封）。
- * sl2608p / cloudflare-ech 当前 DNS 解析不到，单独放一层，避免每次 init 白等 5 秒。
+ * 以前是 `Promise.all` 等所有线路：官方域在墙内被 SNI 阻断，每次 init 都要
+ * 白等 5s（重试后 10s）才继续。现在死线路只是输掉，不影响 init 速度。
+ */
+async function pickFastestApiBase(candidates: readonly string[]): Promise<string | null> {
+  if (candidates.length === 0) return null;
+
+  const controllers = candidates.map(() => new AbortController());
+  return new Promise<string | null>((resolve) => {
+    let pending = candidates.length;
+    let winner: string | null = null;
+    const finish = () => {
+      pending -= 1;
+      if (pending === 0) resolve(winner);
+    };
+
+    candidates.forEach((base, index) => {
+      probeApiBaseLatency(base, controllers[index].signal)
+        .then((ms) => {
+          if (ms !== null && winner === null) {
+            winner = base;
+            // 其余线路立刻取消，别在后台继续等超时。
+            controllers.forEach((controller, i) => {
+              if (i !== index) controller.abort();
+            });
+            resolve(base);
+            return;
+          }
+          finish();
+        })
+        .catch(finish);
+    });
+  });
+}
+
+/**
+ * 每次 init 并发探测所有线路，谁先拿到真 API 信封用谁；全部失败返回 null（保持回退值）。
+ *
+ * 候选 = 官方 + go2778 + part26 五条分流。官方域在墙内基本被 SNI 阻断，
+ * 但海外 / 代理环境可能可用，所以保留在候选里（并发抢答，死线路不影响速度）。
  */
 async function selectApiBaseByLatency(): Promise<string | null> {
-  const primary = [DEFAULT_API_BASE, BACKUP_API_BASE, ...PART26_API_BASES];
-  const winner = await pickFastestApiBase(primary);
-  if (winner) {
-    console.info(`[bika.probe] winner ${winner}`);
-    return winner;
-  }
-  console.warn("[bika.probe] all primary lines failed, trying spare lines");
-  const spare = await pickFastestApiBase([SPARE_API_BASE, ECH_API_BASE]);
-  console.info(`[bika.probe] spare winner ${spare ?? "none"}`);
-  return spare;
+  const candidates = [DEFAULT_API_BASE, BACKUP_API_BASE, ...PART26_API_BASES];
+  const winner = await pickFastestApiBase(candidates);
+  console.info(`[bika.probe] winner ${winner ?? "none"}`);
+  return winner;
 }
 
 /**
@@ -570,8 +582,26 @@ async function selectApiBaseByLatency(): Promise<string | null> {
  * 对象、旧宿主回退内部函数，两者都没有时返回 `{ ok: false }`，请求回退普通 TLS。
  * ECHConfig / IP 由宿主用 DoH 的 HTTPS RR 补齐，插件只负责说「这些域名要走 ECH」。
  */
-function registerEchHosts(): boolean {
-  const table = Object.fromEntries(ECH_API_HOSTS.map((host) => [host, {}]));
+function buildPinnedTable(
+  refreshed: Record<string, string[]>,
+): Record<string, { ips: string[]; pin: true }> {
+  return Object.fromEntries(
+    Object.entries(PINNED_HOSTS).map(([host, builtin]) => {
+      // 刷新到的 IP 放前面，内置的当兜底：reqwest 会按顺序试，前一个连不上就换下一个。
+      const ips = [...new Set([...(refreshed[host] ?? []), ...builtin])];
+      return [host, { ips, pin: true }];
+    }),
+  );
+}
+
+function registerEchHosts(refreshed: Record<string, string[]> = {}): boolean {
+  // 两类登记：
+  // - 走 ECH 的线路：只给域名，ECHConfig / IP 由宿主用 DoH 补；
+  // - DNS 被投毒的域（`*.picacomic.com`）：直接钉真 IP + `pin: true`，保留 SNI。
+  const table = {
+    ...Object.fromEntries(ECH_API_HOSTS.map((host) => [host, {}])),
+    ...buildPinnedTable(refreshed),
+  };
   const result = setEchHosts(table);
   console.info(`[bika.ech] setEchHosts -> ${JSON.stringify(result)}`);
   if (result.ok) {
@@ -582,16 +612,130 @@ function registerEchHosts(): boolean {
   return result.ok === true;
 }
 
-export async function init() {
-  // ECH：宿主版本 > 3.0.37 且具备能力时才登记；先登记，后面的测速 / 登录请求
-  // 才会走「加密 SNI + DoH 钉 IP」。
-  const echVersionOk = await supportsEchHost();
-  const echEnabled = echVersionOk && registerEchHosts();
+/** init 的返回值（宿主不关心内容，只关心有没有抛错）。 */
+type InitResult = {
+  source: string;
+  data: { ok: boolean; started: boolean; apiBase: string };
+};
+
+let initPromise: Promise<InitResult> | null = null;
+
+const PINNED_IPS_SETTING = "network.pinnedIps";
+/** 刷新到的 IP 多久之内不再重查。 */
+const PINNED_IPS_TTL_MS = 6 * 60 * 60 * 1000;
+/** CF DoH 单次超时：墙内直连必然失败，别拖太久。 */
+const PINNED_DOH_TIMEOUT_MS = 3_000;
+
+type PinnedIpsCache = { at: number; hosts: Record<string, string[]> };
+
+async function loadPinnedIps(): Promise<PinnedIpsCache | null> {
+  const raw = await loadPluginSetting(PINNED_IPS_SETTING, null);
+  if (!raw || typeof raw !== "object") return null;
+  const payload = raw as { at?: unknown; hosts?: unknown };
+  const at = Number(payload.at);
+  if (!Number.isFinite(at) || !payload.hosts || typeof payload.hosts !== "object") {
+    return null;
+  }
+  const hosts: Record<string, string[]> = {};
+  for (const [host, ips] of Object.entries(payload.hosts as Record<string, unknown>)) {
+    if (!Array.isArray(ips)) continue;
+    const list = ips.filter((ip): ip is string => typeof ip === "string" && ip.trim() !== "");
+    if (list.length > 0) hosts[host] = list;
+  }
+  return { at, hosts };
+}
+
+async function savePinnedIps(hosts: Record<string, string[]>): Promise<void> {
+  await savePluginSetting(PINNED_IPS_SETTING, { at: Date.now(), hosts });
+}
+
+/**
+ * 用 Cloudflare DoH 查真实 IP。
+ *
+ * 只有走代理 / TUN / 海外网络时才通——墙内直连 `1.1.1.1:443` 是黑洞。
+ * 所以调用方必须把它当「锦上添花」：拿不到就继续用内置 IP。
+ */
+async function fetchRealIps(host: string): Promise<string[] | null> {
+  const url = `https://1.1.1.1/dns-query?name=${encodeURIComponent(host)}&type=A`;
+  try {
+    const response = await fetch(url, {
+      headers: { accept: "application/dns-json" },
+      signal: AbortSignal.timeout(PINNED_DOH_TIMEOUT_MS),
+    });
+    if (!response.ok) return null;
+    const payload = (await response.json()) as {
+      Answer?: Array<{ type?: number; data?: string }>;
+    };
+    const ips = (payload.Answer ?? [])
+      .filter((item) => item.type === 1 && typeof item.data === "string")
+      .map((item) => String(item.data).trim())
+      .filter((ip) => ip !== "");
+    return ips.length > 0 ? ips : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 后台刷新钉 IP 表：先探一个域名，通了再并发补齐其余，最后重新登记。
+ *
+ * 不通（墙内直连）就直接放弃，继续用内置 IP——不会拖慢 init。
+ */
+async function refreshPinnedIps(): Promise<void> {
+  const hosts = Object.keys(PINNED_HOSTS);
+  const [first, ...rest] = hosts;
+  if (!first) return;
+
+  const firstIps = await fetchRealIps(first);
+  if (!firstIps) {
+    console.info("[bika.pin] cf doh unreachable, keep builtin ips");
+    return;
+  }
+
+  const refreshed: Record<string, string[]> = { [first]: firstIps };
+  const results = await Promise.all(
+    rest.map(async (host) => [host, await fetchRealIps(host)] as const),
+  );
+  for (const [host, ips] of results) {
+    if (ips) refreshed[host] = ips;
+  }
+
+  await savePinnedIps(refreshed);
+  registerEchHosts(refreshed);
+  console.info(`[bika.pin] refreshed ${Object.keys(refreshed).length}/${hosts.length} hosts`);
+}
+
+/**
+ * 宿主会在多个时机调 init（页面打开、插件同步、runtime 重建后），
+ * 同一 runtime 内只跑一次：测速 + 登录都是网络请求，重复跑纯属浪费。
+ *
+ * 失败不缓存，允许宿主下次重试。
+ */
+export function init(): Promise<InitResult> {
+  initPromise ??= runInit().catch((error) => {
+    initPromise = null;
+    throw error;
+  });
+  return initPromise;
+}
+
+async function runInit(): Promise<InitResult> {
+  // ECH + 钉 IP：宿主版本 > 3.0.37 且具备能力时才登记；先登记，后面的测速 / 登录请求
+  // 才会走「加密 SNI」或「钉 IP + 正常 SNI」。
+  const networkHostOk = await supportsNetworkHost();
+  const storedPinned = await loadPinnedIps();
+  const hostsRegistered = networkHostOk && registerEchHosts(storedPinned?.hosts ?? {});
   console.info(
-    `[bika.init] ech hosts ${echEnabled ? "registered" : echVersionOk ? "unsupported" : "version-too-old"}`,
+    `[bika.init] network hosts ${hostsRegistered ? "registered" : networkHostOk ? "unsupported" : "version-too-old"}` +
+      `, pinned ips ${storedPinned ? "cached" : "builtin"}`,
   );
 
-  // 回退：测试成功前/测试失败时，缓存 → 持久化 → 官方直连，先凑合用。
+  // 后台刷新钉 IP：走 CF DoH，墙内直连会超时，失败就继续用内置 IP。
+  if (networkHostOk && (!storedPinned || Date.now() - storedPinned.at > PINNED_IPS_TTL_MS)) {
+    void refreshPinnedIps().catch((error) => console.warn("[bika.pin] refresh failed", error));
+  }
+
+  // 回退：测试成功前/测试失败时，缓存 → 持久化 → 备用线路，先凑合用。
   const stopgapApiBase = await resolveStopgapApiBase();
   setApiBase(stopgapApiBase);
   console.info(`[bika.init] stopgap api base: ${stopgapApiBase}`);

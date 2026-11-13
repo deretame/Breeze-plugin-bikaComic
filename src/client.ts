@@ -18,13 +18,19 @@ type ClientPayload = {
   };
 };
 
+/**
+ * 官方主域。墙内基本被 SNI 阻断（DNS 能解出真 IP，但 TLS 握手超时），
+ * 所以只当探测候选，**不能**当兜底线路。
+ */
 export const DEFAULT_API_BASE = "https://picaapi.picacomic.com/";
+/** 官方分流 1，墙内可用；也是探测全失败时的兜底。 */
 export const BACKUP_API_BASE = "https://picaapi.go2778.com/";
 // 以下来自 picacg v2.6.74 拆包：
-// - part26.* 是 domain/model/RouteTarget.java 里的分流 2~6，API 基址统一拼成
-//   https://picaapi.<domain>/（defpackage/g04.java:262）；
-// - sl2608p.top / cloudflare-ech.com 来自 defpackage/k92.java 的智能优选候选池，
-//   实测当前 DNS 已解析不到，只在主线路全挂时兜底。
+// part26.* 是 domain/model/RouteTarget.java 里的分流 2~6，API 基址统一拼成
+// https://picaapi.<domain>/（defpackage/g04.java:262）。
+//
+// 拆包里的智能优选候选池还有 sl2608p.top / cloudflare-ech.com，但这两个域
+// 现在是真的 NXDOMAIN（不是 DNS 污染，DoH 查也是 Status=3），已从候选里删掉。
 export const PART26_API_BASES = [
   "https://picaapi.part26.art/",
   "https://picaapi.part26.click/",
@@ -32,8 +38,6 @@ export const PART26_API_BASES = [
   "https://picaapi.part26.sbs/",
   "https://picaapi.part26.top/",
 ] as const;
-export const SPARE_API_BASE = "https://picaapi.sl2608p.top/";
-export const ECH_API_BASE = "https://picaapi.cloudflare-ech.com/";
 /**
  * 支持 ECH 的线路域（DoH 的 HTTPS RR 里带 `ech=` 参数）。
  *
@@ -49,8 +53,28 @@ export const ECH_API_HOSTS = [
   "picaapi.part26.sbs",
   "picaapi.part26.top",
 ] as const;
+/**
+ * DNS 被投毒的域：直接钉真 IP（保留 SNI），绕过 DNS 解析。
+ *
+ * `*.picacomic.com` 在墙内是**递归层投毒**（阿里 / 腾讯 DoH 都返回假 IP，
+ * 比如 `img.picacomic.com` 被指到 Facebook 的段），但真 IP 直连 TLS 是通的
+ * （实测 200，0.7~1.0s）。这组 IP 来自 Cloudflare DoH（`1.1.1.1`）。
+ *
+ * 宿主侧走 `pin: true`：URL 保持域名、SNI 正常，只把 DNS 换成这里登记的 IP。
+ * 不能用前置（`setFrontHosts`）——Cloudflare 对无 SNI 的连接直接
+ * `handshake failure`。
+ */
+export const PINNED_HOSTS: Record<string, string[]> = {
+  // 官方 API（探测候选之一，钉 IP 后能返回真 API 信封）
+  "picaapi.picacomic.com": ["172.66.173.71", "104.20.42.9"],
+  // 图片域：bika-image.ts 里会用到的那几个
+  "img.picacomic.com": ["172.66.173.71", "104.20.42.9"],
+  "s3.picacomic.com": ["172.66.173.71", "104.20.42.9"],
+  "storage1.picacomic.com": ["172.66.173.71", "104.20.42.9"],
+  "storage-b.picacomic.com": ["172.66.173.71", "104.20.42.9"],
+};
 export const API_BASE_CACHE_KEY = "bika:network.apiBase";
-export let API_BASE = DEFAULT_API_BASE;
+export let API_BASE = BACKUP_API_BASE;
 export const CACHE_KEY_PREFIX = "bikaComic:requestCache:";
 const API_KEY = "C69BAF41DA5ABD1FFEDC6D2FEA56B";
 const SECRET_KEY = "~d}$Q7$eIni=V)9\\RK/P.RM4;9[7|@/CA}b~OW!3?EV`:<>M7pddUBL5n|0/*Cn";
@@ -65,7 +89,8 @@ function normalizeApiBase(base: string): string {
 export function setApiBase(base: string) {
   console.info(`setApiBase: ${base}`);
   const normalized = normalizeApiBase(base);
-  API_BASE = normalized || DEFAULT_API_BASE;
+  // 空值兜底用 go2778：官方域在墙内被 SNI 阻断，不能当默认值。
+  API_BASE = normalized || BACKUP_API_BASE;
 }
 
 export async function getApiBase() {
